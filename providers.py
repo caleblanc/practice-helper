@@ -81,16 +81,101 @@ def _norm(provider: str, title, artist, album, url) -> dict:
 # ── Apple Music ───────────────────────────────────────────────────────────────
 
 class AppleMusic(Provider):
-    def search(self, query, creds, limit=20):
-        # The iTunes Search API is public — no key, no account.
+    """iTunes Search, with an artist-catalogue fallback.
+
+    /search is public and needs no account, but it matches terms strictly and
+    misses plenty: "polaris masochist" returns nothing at all, though Polaris's
+    "Masochist" is in the catalogue and the Apple Music app finds it instantly.
+    /lookup by artist id does return it, so when a term search comes up short
+    the artist is resolved first and their songs filtered locally.
+    """
+
+    def _term_search(self, query, limit):
         r = httpx.get("https://itunes.apple.com/search",
                       params={"term": query, "media": "music",
                               "entity": "song", "limit": limit},
                       timeout=TIMEOUT)
         r.raise_for_status()
+        return r.json().get("results", [])
+
+    def _artist_catalogue(self, query, limit):
+        import re as _re
+        words = [w for w in _re.split(r"\W+", query.lower()) if w]
+        if not words:
+            return []
+        # The whole query rarely names an artist -- "polaris masochist" matches
+        # none -- so fall back to progressively shorter leading phrases, which
+        # is how people type: artist first, then song.
+        artists = []
+        for take in range(len(words), 0, -1):
+            phrase = " ".join(words[:take])
+            try:
+                r = httpx.get("https://itunes.apple.com/search",
+                              params={"term": phrase, "media": "music",
+                                      "entity": "musicArtist", "limit": 8},
+                              timeout=TIMEOUT)
+                r.raise_for_status()
+                artists = r.json().get("results", [])
+            except Exception:
+                artists = []
+            if artists:
+                break
+        if not artists:
+            return []
+
+        # Several artists share a name -- there are ten "Polaris" -- so all the
+        # candidates are fetched at once rather than one after another, which
+        # took five seconds.
+        import concurrent.futures as _cf
+
+        def catalogue(a):
+            aid = a.get("artistId")
+            if not aid:
+                return []
+            name_words = {w for w in _re.split(r"\W+", (a.get("artistName") or "").lower()) if w}
+            # Whatever the user typed that is not the artist's name is the song.
+            rest = [w for w in words if w not in name_words]
+            try:
+                lk = httpx.get("https://itunes.apple.com/lookup",
+                               params={"id": aid, "entity": "song", "limit": 200},
+                               timeout=TIMEOUT)
+                lk.raise_for_status()
+                songs = [x for x in lk.json().get("results", [])
+                         if x.get("wrapperType") == "track"]
+            except Exception:
+                return []
+            keep = []
+            for t in songs:
+                title = (t.get("trackName") or "").lower()
+                if rest and not all(w in title for w in rest):
+                    continue
+                keep.append(t)
+            return keep
+
+        out, seen = [], set()
+        cands = artists[:6]
+        with _cf.ThreadPoolExecutor(max_workers=6) as ex:
+            for songs in ex.map(catalogue, cands):
+                for t in songs:
+                    key = (t.get("artistName"), t.get("trackName"), t.get("collectionName"))
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    out.append(t)
+                    if len(out) >= limit:
+                        return out
+        return out
+
+    def search(self, query, creds, limit=20):
+        results = self._term_search(query, limit)
+        if len(results) < 3:
+            have = {(t.get("artistName"), t.get("trackName")) for t in results}
+            for t in self._artist_catalogue(query, limit - len(results)):
+                if (t.get("artistName"), t.get("trackName")) not in have:
+                    results.append(t)
         return [_norm(self.id, t.get("trackName"), t.get("artistName"),
                       t.get("collectionName"), t.get("trackViewUrl"))
-                for t in r.json().get("results", [])]
+                for t in results]
 
 
 # ── Deezer ────────────────────────────────────────────────────────────────────

@@ -41,10 +41,18 @@ def norm(text: str, strip_noise: bool = True) -> str:
 
 
 def _artist_ok(a: str, b: str) -> bool:
-    a, b = norm(a), norm(b)
-    if not a or not b:
+    """Do these two artist names refer to the same act?
+
+    Compared as whole words, never as raw text: "Pol" and "Polar" are both
+    substrings of "Polaris" and are both real bands, so substring matching
+    hands their tabs to Polaris songs and ranks them above the genuine ones.
+    Word containment still allows the usual variations -- "Architects" against
+    "Architects UK", "Blue Encount" against "BLUE ENCOUNT".
+    """
+    at, bt = set(norm(a).split()), set(norm(b).split())
+    if not at or not bt:
         return True                    # nothing to contradict
-    return a == b or a in b or b in a
+    return at == bt or at <= bt or bt <= at
 
 
 UNCERTAIN_PENALTY = 0.45     # title matches, artist does not
@@ -59,7 +67,8 @@ def rate(track: dict, tab: dict):
     alone loses the correct tab. It is returned as *uncertain* instead, which
     means it is shown for the user to confirm rather than chosen for them.
     """
-    title_score = _title_score(track, tab)
+    artist_ok = _artist_ok(track.get("artistName", ""), tab.get("artist", ""))
+    title_score = _title_score(track, tab, allow_short=artist_ok)
     if title_score <= 0:
         return 0.0, False
     # Noise-stripping is right for a streaming title -- "(Remastered 2011)" is
@@ -70,7 +79,7 @@ def rate(track: dict, tab: dict):
     extra = max(0, len(norm(tab.get("title", ""), strip_noise=False).split())
                    - len(norm(track.get("trackName", ""), strip_noise=False).split()))
     title_score = max(0.3, title_score - 0.04 * extra)
-    if _artist_ok(track.get("artistName", ""), tab.get("artist", "")):
+    if artist_ok:
         return title_score, True
     # Only an exact title is a strong enough signal to survive a wrong artist;
     # a partial title plus a wrong artist is just a different song.
@@ -84,7 +93,7 @@ def score(track: dict, tab: dict) -> float:
     return rate(track, tab)[0]
 
 
-def _title_score(track: dict, tab: dict) -> float:
+def _title_score(track: dict, tab: dict, allow_short: bool = False) -> float:
     t, s = norm(track.get("trackName", "")).split(), norm(tab.get("title", "")).split()
     if not t or not s:
         return 0.0
@@ -96,9 +105,10 @@ def _title_score(track: dict, tab: dict) -> float:
     short, long_ = (t, s) if len(t) <= len(s) else (s, t)
     if long_[:len(short)] != short:
         return 0.0
-    # A single-word title is too weak an anchor to extend -- "Blind" would
-    # happily swallow "Blind Faith" -- so only extend from two words up.
-    if len(short) < 2:
+    # A single-word title is too weak an anchor to extend on its own -- "Blind"
+    # would swallow "Blind Faith" -- but when the artist already agrees it is
+    # safe, and required: "Masochist" has to reach "Masochist (7 strings)".
+    if len(short) < 2 and not allow_short:
         return 0.0
     extra = len(long_) - len(short)
     return max(0.5, 0.9 - 0.05 * extra)
