@@ -16,12 +16,13 @@ from fractions import Fraction as F
 import xml.etree.ElementTree as ET
 
 TEMPLATE   = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gp_template")
-NOTE_VALUE = {1:"Whole",2:"Half",4:"Quarter",8:"Eighth",16:"16th",32:"32nd",64:"64th"}
+NOTE_VALUE = {1:"Whole",2:"Half",4:"Quarter",8:"Eighth",16:"16th",32:"32nd",
+              64:"64th",128:"128th",256:"256th"}
 STEPS      = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"]
 DRUM_ID    = 1024
 # Bump whenever the written output changes, so the app regenerates stale files
 # instead of silently serving one built by an older converter.
-WRITER_VERSION = "14"
+WRITER_VERSION = "15"
 STAMP = "songsterr_to_gp v" + WRITER_VERSION
 # A tremolo covering only a few subdivisions is a real burst (a drum double
 # stroke, e.g. a 16th played as two 32nds) and gets written out. Anything longer
@@ -42,7 +43,10 @@ KICK_R, KICK_L = 36, 35
 DYN        = {"ppp":"PPP","pp":"PP","p":"P","mp":"MP","mf":"MF","f":"F","ff":"FF","fff":"FFF"}
 
 CANDS = []
-for _nv in (1,2,4,8,16,32,64):
+# Up to 256ths: real transcriptions do use them. Korn's "Freak On A Leash" has
+# 34 genuine 128th notes on the drum track, and stopping at 64 meant a single
+# unrepresentable beat aborted the whole score.
+for _nv in (1,2,4,8,16,32,64,128,256):
     CANDS.append((F(1,_nv), _nv, 0, False))
     CANDS.append((F(3,2*_nv), _nv, 1, False))
     CANDS.append((F(7,4*_nv), _nv, 2, False))
@@ -195,7 +199,17 @@ def convert(revision, track_data, dest_path, notation="standard"):
                         stats["truncated_at_barline"] += 1
                         if frac <= 0: break
                     if frac not in EXACT:
-                        for nv,dots,tup in _fill(pos, pos+frac):
+                        try:
+                            filled = _fill(pos, pos+frac)
+                        except ValueError:
+                            # Finer than anything Guitar Pro can notate. Round to
+                            # the shortest value we do have and carry on: losing
+                            # one beat's precision beats losing the whole score.
+                            warn.append("bar %d: duration %s is finer than a 256th; "
+                                        "rounded" % (mi+1, frac))
+                            stats["duration_rounded"] += 1
+                            filled = [EXACT[min(EXACT)]]
+                        for nv,dots,tup in filled:
                             seq.append(((nv,dots,tup), [], "MF", ""))
                         stats["unrepresentable_duration"] += 1; pos += frac; continue
                     nv,dots,tup = EXACT[frac]

@@ -548,6 +548,14 @@ class ProgressOverlay(ctk.CTkToplevel):
         except Exception:
             pass
 
+    def show_errors(self, errors: list):
+        """Keep the panel up after a failed run, listing what actually broke."""
+        self.panel.show_stages([])
+        self.panel.set_error_list(errors)
+        self._place(rows=min(len(errors), 6) + 1)
+        self.deiconify()
+        self.lift()
+
     def _follow(self, _e=None):
         if self.winfo_viewable():
             self._place(self._rows)
@@ -603,6 +611,28 @@ class LogPanel(ctk.CTkFrame):
         for key, _t, _c in self.STAGES:
             if key in keys:
                 self._rows[key].pack(fill="x", pady=2)
+
+    def set_error_list(self, errors: list):
+        for w in self._bar_host.winfo_children():
+            w.pack_forget()
+        if not hasattr(self, "_err_host"):
+            self._err_host = ctk.CTkFrame(self, fg_color="transparent")
+        for w in self._err_host.winfo_children():
+            w.destroy()
+        self._err_host.pack(fill="x", padx=12, pady=(8, 2), before=self._line)
+        ctk.CTkLabel(self._err_host, text="Errors", text_color="#f06060", anchor="w",
+                     font=ctk.CTkFont(size=11, weight="bold")).pack(fill="x")
+        for e in errors[:6]:
+            ctk.CTkLabel(self._err_host, text="• " + str(e), text_color="#f0a0a0",
+                         anchor="w", justify="left", font=("", 10),
+                         wraplength=560).pack(fill="x", padx=(6, 0))
+        if len(errors) > 6:
+            ctk.CTkLabel(self._err_host, text=f"…and {len(errors)-6} more",
+                         text_color=MUTED, anchor="w", font=("", 10)).pack(fill="x", padx=(6, 0))
+
+    def clear_errors(self):
+        if hasattr(self, "_err_host"):
+            self._err_host.pack_forget()
 
     def set_stage(self, key: str, fraction: float):
         if key not in self._bars:
@@ -1466,7 +1496,7 @@ class App(ctk.CTk):
             self._embed_audio(audio_label, errors)
 
         msg = "Done!" if not errors else f"Done with {len(errors)} error(s)."
-        self.after(0, self._process_done, msg, bool(errors))
+        self.after(0, self._process_done, msg, list(errors))
 
     def _run_downloader(self, url: str) -> bool:
         """Run the active provider's download command.
@@ -1812,11 +1842,25 @@ class App(ctk.CTk):
         else:
             self._log.pack(fill="x", padx=12, pady=(0, 12))
 
-    def _process_done(self, msg: str, had_errors: bool):
+    def _process_done(self, msg: str, errors=None):
+        errors = list(errors or [])
         self._process_btn.configure(state="normal", text="Process")
-        color = "#f06060" if had_errors else GREEN
-        self._status.configure(text=msg, text_color=color)
-        self._log_line(f"\n{'✗' if had_errors else '✓'} {msg}")
+        color = "#f06060" if errors else GREEN
+        self._log_line(f"\n{'✗' if errors else '✓'} {msg}")
+        for e in errors:
+            self._log_line(f"   • {e}")
+        if not errors:
+            self._status.configure(text=msg, text_color=color)
+            return
+        # Saying only "2 errors" and hiding what they were is useless. Put the
+        # first one in the status bar and keep the panel up with all of them.
+        self._status.configure(text=f"{msg}  {errors[0]}", text_color=color)
+        self._last_errors = errors
+        if self._overlay is not None:
+            try:
+                self._overlay.show_errors(errors)
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":
