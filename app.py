@@ -1427,6 +1427,12 @@ class App(ctk.CTk):
                 sel_stems = sorted(set(sel_stems) | {x for x in audio_stems if x != "drums"})
                 if "drums" in audio_stems:
                     need_od = True
+            if getattr(self, "gp_with_audio", False):
+                # The drum stem is the strongest alignment signal, and demucs
+                # separates it whether or not it goes into the mix. Keeping it
+                # costs one file and materially improves the offset; it is only
+                # added to the backing track if the user actually ticked it.
+                need_od = need_od or not (song_dir / f"{label} (OD).wav").exists()
             need_stems = need_od or need_nd or bool(sel_stems) or bool(sel_combo)
 
             # Duplicate checks — files now live in per-song subfolder
@@ -1821,10 +1827,20 @@ class App(ctk.CTk):
         try:
             mixed = song_dir / f".{label}_audio.wav"
             gp_audio.mix_stems(parts, str(mixed))
-            drum = next((p for p in (song_dir / f"{label} (drums).wav",
-                                     song_dir / f"{label} (OD).wav") if p.exists()), None)
-            gp_audio.align_and_embed(str(gp), str(drum) if drum else None,
-                                     str(mixed), str(gp) + ".tmp", log=self._log_line)
+            # Hand the aligner every stem it can use. Drums, bass and vocals
+            # each vote independently, and agreement between them is far better
+            # evidence than one sharp correlation peak.
+            pool = {}
+            for name, cands in (("drums",  [f"{label} (drums).wav", f"{label} (OD).wav"]),
+                                ("bass",   [f"{label} (bass).wav"]),
+                                ("other",  [f"{label} (other).wav"]),
+                                ("vocals", [f"{label} (vocals).wav"])):
+                hit = next((song_dir / c for c in cands if (song_dir / c).exists()), None)
+                if hit:
+                    pool[name] = str(hit)
+            gp_audio.align_and_embed(str(gp), pool.get("drums"),
+                                     str(mixed), str(gp) + ".tmp",
+                                     log=self._log_line, stems=pool)
             os.replace(str(gp) + ".tmp", str(gp))
             mixed.unlink(missing_ok=True)
             self._log_line(f"  ✓ Audio embedded ({len(parts)} stem(s))")
