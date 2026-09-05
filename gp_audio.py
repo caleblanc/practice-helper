@@ -136,7 +136,8 @@ def first_note_time(gp_path):
     return hits[0] if hits else None
 
 
-def _walk_drums(gp_path, collect_all, limit=None, types=("drumKit",)):
+def _walk_drums(gp_path, collect_all, limit=None, types=("drumKit",),
+                want_articulations=False):
     out = []
     with zipfile.ZipFile(str(gp_path)) as z:
         root = ET.fromstring(z.read("Content/score.gpif").decode("utf-8"))
@@ -152,6 +153,7 @@ def _walk_drums(gp_path, collect_all, limit=None, types=("drumKit",)):
     rh = {r.get("id"): r for r in root.find("Rhythms")}
     bt = {b.get("id"): b for b in root.find("Beats")}
     vo = {v.get("id"): v for v in root.find("Voices")}
+    notes = {n.get("id"): n for n in root.find("Notes")} if want_articulations else {}
     bars = list(root.find("Bars"))
 
     tempos = []
@@ -185,16 +187,27 @@ def _walk_drums(gp_path, collect_all, limit=None, types=("drumKit",)):
                 pos = F(0)
                 for bid in vo[vid].findtext("Beats").split():
                     beat = bt[bid]
-                    if beat.findtext("Notes"):
+                    ntxt = beat.findtext("Notes")
+                    if ntxt:
                         t = seconds + float(pos) * whole_secs
                         if not collect_all:
                             return [t]
-                        out.append(t)
+                        if want_articulations:
+                            arts = set()
+                            for nid in ntxt.split():
+                                n = notes.get(nid)
+                                if n is not None:
+                                    a = n.findtext("InstrumentArticulation")
+                                    if a is not None:
+                                        arts.add(int(a))
+                            out.append((t, arts))
+                        else:
+                            out.append(t)
                     pos += _beat_duration(rh[beat.find("Rhythm").get("ref")])
         seconds += float(bar_len) * whole_secs
         if limit and seconds > limit:
             break
-    return sorted(out)
+    return sorted(out, key=(lambda z: z[0]) if want_articulations else None)
 
 
 # ── embedding ────────────────────────────────────────────────────────────────
@@ -291,6 +304,81 @@ def embed(gp_path, audio_path, out_path, padding_frames=0, original_path=None):
         for n in sorted(members):
             z.writestr(n, members[n])
     return out_path
+
+
+# Which GM notes count as which drum. Kick and snare are the two that a
+# transcription always gets right and that sit in clearly separate parts of the
+# spectrum, which makes them far better alignment landmarks than "any drum hit".
+KICK_MIDI  = {35, 36}
+SNARE_MIDI = {38, 40}
+
+# Bands to listen in for each. A kick is almost entirely below 120 Hz; a snare
+# is its shell around 150-450 Hz plus the wire rattle up at 2-7 kHz, and taking
+# both halves separates it cleanly from toms and cymbals.
+KICK_BANDS  = ((35.0, 120.0),)
+SNARE_BANDS = ((150.0, 450.0), (2000.0, 7000.0))
+
+
+def _articulation_midi(gp_path):
+    """Articulation index -> GM note, read from the score's own drum kit."""
+    with zipfile.ZipFile(str(gp_path)) as z:
+        x = z.read("Content/score.gpif").decode("utf-8")
+    i = x.find("<Type>drumKit</Type>")
+    if i < 0:
+        return {}
+    seg = x[i: x.find("</InstrumentSet>", i)]
+    out = {}
+    for idx, a in enumerate(re.findall(r"<Articulation>(.*?)</Articulation>", seg, re.S)):
+        m = re.search(r"<OutputMidiNumber>(\d+)<", a)
+        if m:
+            out[idx] = int(m.group(1))
+    return out
+
+
+def drum_onsets_by_kind(gp_path, limit=None):
+    """Notated kick and snare onsets, in seconds from bar 1."""
+    artmap = _articulation_midi(gp_path)
+    if not artmap:
+        return {}
+    kick_arts = {i for i, n in artmap.items() if n in KICK_MIDI}
+    snare_arts = {i for i, n in artmap.items() if n in SNARE_MIDI}
+    hits = _walk_drums(gp_path, collect_all=True, limit=limit,
+                       types=("drumKit",), want_articulations=True)
+    out = {"kick": [], "snare": []}
+    for t, arts in hits:
+        if arts & kick_arts:
+            out["kick"].append(t)
+        if arts & snare_arts:
+            out["snare"].append(t)
+    return out
+
+
+def _band_flux(wav_path, window, bands):
+    """Spectral-flux envelope restricted to particular frequency bands."""
+    import numpy as np
+    x, sr = _read_wav(wav_path)
+    x = x.mean(axis=1)[: int(window * sr)]
+    H, N = 512, 2048
+    fps = sr / H
+    frames = 1 + (len(x) - N) // H
+    if frames < 16:
+        return None, fps
+    freqs = np.fft.rfftfreq(N, 1.0 / sr)
+    mask = np.zeros(len(freqs), dtype=bool)
+    for lo, hi in bands:
+        mask |= (freqs >= lo) & (freqs <= hi)
+    if not mask.any():
+        return None, fps
+    win = np.hanning(N).astype("float32")
+    S = np.empty((frames, int(mask.sum())), dtype="float32")
+    for i in range(frames):
+        S[i] = np.abs(np.fft.rfft(x[i * H:i * H + N] * win))[mask]
+    flux = np.maximum(0, np.diff(S, axis=0)).sum(axis=1)
+    if flux.max() <= 0:
+        return None, fps
+    flux = flux / flux.max()
+    flux -= _moving_avg(flux, int(fps))
+    return flux, fps
 
 
 def _onset_flux(wav_path, window):
@@ -469,6 +557,72 @@ def _tempo_regions(gp_path):
         seconds += float(F(num, den)) * (4 * 60.0 / bpm_at(mi))
     starts.append(seconds)                      # end of the last bar
     return tempos, starts
+
+
+START_WINDOW = 30.0     # seconds of the song used to find where it begins
+
+
+def estimate_start_offset(gp_path, stems, window=START_WINDOW, max_lag=15.0):
+    """How far the recording starts behind the score, in seconds.
+
+    Measured over the opening only. Correlating the whole song answers a
+    different question: by the middle, an approximate tempo map has drifted by
+    seconds, and the best global lag is dominated by that drift rather than by
+    where the music starts. On one song the full-length answer was +2345 ms
+    while every window under a minute agreed on +418 ms, against a true value
+    of 412 ms.
+
+    Kick and snare are correlated in their own frequency bands against the
+    notes the score writes for them specifically, which is a far cleaner signal
+    than treating every drum hit as one undifferentiated event.
+    """
+    import numpy as np
+    votes = {}
+    drum = (stems or {}).get("drums")
+    if drum and os.path.exists(drum):
+        kinds = drum_onsets_by_kind(gp_path, limit=window)
+        for kind, bands in (("kick", KICK_BANDS), ("snare", SNARE_BANDS)):
+            sel = [t for t in kinds.get(kind, []) if t < window]
+            if len(sel) < 8:
+                continue
+            flux, fps = _band_flux(drum, max(window * 1.6, 30.0), bands)
+            if flux is None:
+                continue
+            o, c = _correlate(flux, sel, fps, max_lag)
+            if o is not None:
+                votes[kind] = (o, c, len(sel))
+
+    # Melodic stems as corroboration, broadband against their own parts.
+    for name, path in (stems or {}).items():
+        if name == "drums" or not path or not os.path.exists(path):
+            continue
+        types = STEM_TRACKS.get(name)
+        if not types:
+            continue
+        sel = [t for t in score_onsets(gp_path, limit=window, types=types) if t < window]
+        if len(sel) < 8:
+            continue
+        flux, fps = _onset_flux(path, max(window * 1.6, 30.0))
+        if flux is None:
+            continue
+        o, c = _correlate(flux, sel, fps, max_lag)
+        if o is not None:
+            votes[name] = (o, c, len(sel))
+
+    if not votes:
+        return None, 0.0, {}
+    # Agreement decides, not the sharpest single peak.
+    best, bestscore = None, -1.0
+    for k, (o, c, n) in votes.items():
+        agree = [j for j, (o2, _c2, _n2) in votes.items() if abs(o2 - o) <= AGREE_TOLERANCE]
+        sc = (len(agree), sum(votes[j][1] for j in agree))
+        if sc > (0, bestscore) and (best is None or sc > best[0]):
+            best, bestscore = (sc, agree), sc[1]
+    agree = best[1]
+    w = sum(votes[j][1] for j in agree)
+    offset = sum(votes[j][0] * votes[j][1] for j in agree) / w
+    conf = max(votes[j][1] for j in agree) * (1.0 + 0.4 * (len(agree) - 1))
+    return offset, conf, votes
 
 
 def fit_tempo_map(gp_path, stems, window=600.0, max_lag=30.0):
@@ -727,7 +881,10 @@ def align_and_embed(gp_path, drum_stem, audio_path, out_path, log=print,
                     % (r["bar"], "%gbpm" % r["bpm"], r["offset"] * 1000,
                        r["confidence"], r["stems"]))
         if pad is not None:
-            offset = pad
+            # Deliberately not pad: the tempo fit answers "how fast does each
+            # section run", measured over whole sections. Where the song starts
+            # is a separate question, and answering it from a long window lets
+            # accumulated drift dominate.
             if detail.get("changed"):
                 changes = [(b, c) for (b, c), (_b, o) in
                            zip(corrected, _tempo_regions(gp_path)[0]) if abs(c - o) > 0.05]
@@ -737,6 +894,39 @@ def align_and_embed(gp_path, drum_stem, audio_path, out_path, log=print,
                 os.close(fd)
                 write_tempo_map(gp_path, corrected, tmp_gp)
                 source = tmp_gp
+
+    # Where the recording starts, measured on the opening alone.
+    start, sconf, svotes = estimate_start_offset(source, pool)
+    for k, (o, c, n) in sorted(svotes.items()):
+        log("  %-6s start %+.0f ms from %d notes (peak %.1fx)" % (k, o * 1000, n, c))
+
+    # Strong prior: the mix is made from this very recording, so the point where
+    # its leading silence ends is where the music starts, and the score's first
+    # note is where the score starts. Correlation is good at refining that and
+    # bad at replacing it -- without a drum stem it has produced answers as wild
+    # as -2.0 s and +14.9 s on songs whose silence says 67 ms and 120 ms.
+    prior = None
+    try:
+        firsts = [score_onsets(source, limit=60.0, types=t)[:1]
+                  for t in STEM_TRACKS.values()]
+        earliest = min([f[0] for f in firsts if f], default=None)
+        if earliest is not None:
+            prior = leading_silence(audio_path) - earliest
+    except Exception:
+        prior = None
+
+    if start is not None and prior is not None and abs(start - prior) > 0.25:
+        log("  correlation said %+.0f ms but the recording starts at %+.0f ms; "
+            "trusting the recording" % (start * 1000, prior * 1000))
+        offset = prior
+    elif start is not None:
+        offset = start
+        log("  start offset %+.0f ms (confidence %.1fx from %d signal(s))"
+            % (offset * 1000, sconf, len(svotes)))
+    elif prior is not None:
+        offset = prior
+        log("  start offset %+.0f ms (from the recording's own leading silence)"
+            % (offset * 1000))
 
     if offset is None:
         res = estimate_offset_multi(gp_path, pool)
