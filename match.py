@@ -112,14 +112,31 @@ def _annotate(tr, tabs, limit):
     "Holy Roller (Zev Rose live playthrough drums only)" normalises to an exact
     match and would otherwise outrank the plain transcription.
     """
-    hits = []
+    certain, uncertain = [], []
     for tb in tabs:
-        sc, certain = rate(tr, tb)
-        if sc > 0:
-            # Copy: a pool entry can match several tracks, each needing its own
-            # verdict.
-            hits.append((sc, len(tb.get("title") or ""),
-                         dict(tb, _score=sc, _certain=certain)))
+        sc, is_certain = rate(tr, tb)
+        if sc <= 0:
+            continue
+        # Copy: a pool entry can match several tracks, each needing its own
+        # verdict.
+        row = (sc, len(tb.get("title") or ""), dict(tb, _score=sc, _certain=is_certain))
+        (certain if is_certain else uncertain).append(row)
+
+    # A wrong-artist match is a fallback, never an addition. "Polaris" is a
+    # song by Jimmy Eat World, a song by Blue Encount and a band with other
+    # songs entirely; offering all of them against each other buries the one
+    # correct tab. They are only worth showing when nothing by the right artist
+    # turned up at all -- which is the case this was built for, a tab filed
+    # under the wrong name.
+    hits = certain
+    if not hits and uncertain:
+        # A wrong-artist match is only credible when the title identifies the
+        # song on its own. A one-word title like "Polaris" is a song by Jimmy
+        # Eat World, a song by Blue Encount and a band with other songs
+        # entirely, so same-titled tabs say nothing about which is right. Two
+        # words or more is specific enough to be worth offering.
+        if len(norm(tr.get("trackName", "")).split()) >= 2:
+            hits = uncertain
     hits.sort(key=lambda x: (-x[0], x[1]))
     return [tb for _s, _n, tb in hits[:limit]]
 

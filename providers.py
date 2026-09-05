@@ -49,6 +49,11 @@ class Provider:
     dim: str                      # darker shade, for button hover states
     tint: str                     # very dark shade, for the options column
     fields: tuple = ()
+    # Which of `fields` searching actually needs. Apple Music's cookies, for
+    # example, authorise downloads -- its search API is public -- so demanding
+    # them before a search blocks something that works perfectly well without.
+    # None means "all of them".
+    search_fields: tuple | None = None
     # {url}, {out} and any credential key are substituted at run time.
     download_cmd: str = ""
     can_download: bool = False    # False => search only, bring your own audio
@@ -60,6 +65,11 @@ class Provider:
     def missing(self, creds: dict) -> list[Field]:
         """Credential fields that are still blank."""
         return [f for f in self.fields if not (creds.get(f.key) or "").strip()]
+
+    def missing_for_search(self, creds: dict) -> list[Field]:
+        """Only the fields searching cannot proceed without."""
+        needed = self.fields if self.search_fields is None else self.search_fields
+        return [f for f in needed if not (creds.get(f.key) or "").strip()]
 
 
 def _norm(provider: str, title, artist, album, url) -> dict:
@@ -230,6 +240,7 @@ _add(AppleMusic(
     accent="#fc3c44", dim="#c02b32", tint="#3a1418",
     fields=(Field("apple_cookies", "Cookies file", "file",
                   "Exported from a browser signed in to music.apple.com"),),
+    search_fields=(),          # the iTunes Search API is public
     download_cmd='gamdl --cookies-path "{apple_cookies}" --output-path "{out}" '
                  '--no-exceptions "{url}"',
     can_download=True,

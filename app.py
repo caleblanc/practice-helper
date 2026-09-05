@@ -699,9 +699,10 @@ class TabRow(ctk.CTkFrame):
                      font=("", 11), width=14).pack(side="left")
         title = self.tab.get("title", "Unknown")
         if not self.tab.get("_certain", True):
-            # Filed under a different artist, so name it: that is the whole
-            # reason this row is being shown instead of chosen automatically.
-            title += "   — %s" % self.tab.get("artist", "?")
+            # No tab by the right artist exists, so these are same-titled tabs
+            # by someone else. Say so explicitly: "Polaris — Hypermania" reads
+            # like a song title, not like a warning.
+            title += "      (filed under %s)" % self.tab.get("artist", "?")
         ctk.CTkLabel(inner, text=title, anchor="w",
                      text_color=BLUE if self.tab.get("_certain", True) else ORANGE,
                      font=("", 11)).pack(side="left", fill="x", expand=True)
@@ -1466,7 +1467,7 @@ class App(ctk.CTk):
         def fetch_am():
             nonlocal am_results, am_err
             try:
-                missing = prov.missing(self.creds)
+                missing = prov.missing_for_search(self.creds)
                 if missing:
                     raise RuntimeError(
                         "not set up yet — add " +
