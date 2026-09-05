@@ -1,6 +1,6 @@
 # Practice Helper
 
-**v0.02**
+**v0.03**
 
 Find a song, pull down its audio, split it into stems, and get a Guitar Pro
 score — from one window.

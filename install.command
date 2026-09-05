@@ -128,8 +128,8 @@ cat > "$DEST/Contents/Info.plist" <<PLIST
   <key>CFBundleName</key><string>$APP_NAME</string>
   <key>CFBundleDisplayName</key><string>$APP_NAME</string>
   <key>CFBundleIdentifier</key><string>com.caleblanc.practicehelper</string>
-  <key>CFBundleVersion</key><string>0.02</string>
-  <key>CFBundleShortVersionString</key><string>0.02</string>
+  <key>CFBundleVersion</key><string>0.03</string>
+  <key>CFBundleShortVersionString</key><string>0.03</string>
   <key>CFBundleExecutable</key><string>practice-helper</string>
   <key>CFBundleIconFile</key><string>icon</string>
   <key>CFBundlePackageType</key><string>APPL</string>

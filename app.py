@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Practice Helper — streaming audio, stem separation, and Songsterr scores."""
 
-__version__ = "0.02"
+__version__ = "0.03"
 
 import json
 import os

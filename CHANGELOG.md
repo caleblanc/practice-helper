@@ -1,5 +1,55 @@
 # Changelog
 
+## 0.03
+
+### Browser
+
+- Streaming results and Songsterr tabs are one list instead of two. Each song
+  carries up to three matching tabs nested beneath it, and picking a tab
+  selects the track it sits under.
+- Matching normalises remaster tags, feature credits and version suffixes,
+  compares whole words rather than substrings, and requires the artist to
+  agree. Live APIs: Korn 19/20, Architects 17/20, Meshuggah 19/20.
+- The score panel's title names what it will produce: "Guitar Pro", "MIDI" or
+  "Guitar Pro & MIDI".
+
+### Scores
+
+- Songsterr ornaments become real Guitar Pro grace notes. A flam arrives as a
+  beat of near-zero length before the note it decorates; these are now written
+  as a 32nd with `<GraceNotes>BeforeBeat</GraceNotes>`, exempt from the bar
+  duration, which is how Guitar Pro itself stores them.
+- Notes finer than a 64th no longer abort the conversion. Korn's "Freak On A
+  Leash" has 34 genuine 128th notes, and a single unrepresentable beat was
+  costing the entire 11-track score.
+
+### Audio
+
+- Alignment uses every available stem. Drums, bass, guitars/keys and vocals are
+  each correlated against the notes their own instrument plays, and the
+  normalised curves are summed before a peak is chosen. Repetitive music
+  produces many near-equal peaks a phrase apart, so a single stem's answer is
+  close to arbitrary: single-stem recovered 2 of 6 known shifts, summing
+  recovers 6 of 6 within 10 ms.
+- Confidence now reflects whether stems agree rather than how sharp one peak
+  was — 15x where two stems land within 47 ms, 2.2x where they differ by 233 ms.
+- The drum stem is kept for alignment even when excluded from the backing mix,
+  which is the normal setting for playing along.
+
+### Fixes
+
+- **`scipy` was imported but never installed**, so embedding audio failed every
+  time with a message that said only "audio embed failed". Replaced with numpy
+  equivalents rather than adding a heavy dependency for two one-line filters.
+- **Errors were counted but never shown.** The finish handler only received a
+  boolean, so "Done with 2 errors" was all it could display. It now lists them.
+
+### Setup
+
+- The downloader is installed from inside the app, on consent, once a service
+  has been chosen — the installer no longer asks about gamdl before you have
+  picked a provider. Asked once per tool per session.
+
 ## 0.02
 
 Fixes to make a fresh install actually work, plus double-click installers.
