@@ -1,6 +1,6 @@
 # Practice Helper
 
-**v0.01**
+**v0.02**
 
 Find a song, pull down its audio, split it into stems, and get a Guitar Pro
 score — from one window.
@@ -52,37 +52,57 @@ The interface takes on the brand colour of whichever service is selected.
 
 ## Install
 
-```bash
-git clone https://github.com/caleblanc/practice-helper
-cd practice-helper
-python3 -m venv .venv
-```
+### Download the installer (recommended)
+
+Grab it from the [latest release](https://github.com/caleblanc/practice-helper/releases/latest)
+and double-click. It builds an isolated Python environment and installs the app
+— no terminal needed.
+
+- **macOS** — `install.command`. The first time, **right-click it and choose
+  Open**, since it is not code-signed. It installs *Practice Helper.app* into
+  your Applications folder.
+- **Windows** — `install.bat`. It creates Desktop and Start Menu shortcuts.
+
+The installer needs [Python 3.11+](https://www.python.org/downloads/) already
+present (on Windows, tick **Add python.exe to PATH** when installing it). It
+will tell you if it is missing rather than failing halfway through.
+
+It is a bootstrap installer, not a frozen bundle. Stem separation depends on
+PyTorch, which is several gigabytes and unreliable to freeze; building the
+environment on your machine is a smaller download and far more likely to work.
+
+### From source
+
+Pick **one** of these — not both.
 
 macOS / Linux:
 
 ```bash
-source .venv/bin/activate && pip install -r requirements.txt
+git clone https://github.com/caleblanc/practice-helper
+cd practice-helper
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python3 app.py
 ```
 
 Windows:
 
 ```bat
-.venv\Scripts\activate && pip install -r requirements.txt
+git clone https://github.com/caleblanc/practice-helper
+cd practice-helper
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+python app.py
 ```
 
-## Run
-
-```bash
-./launch.command      # macOS / Linux
-```
-
-```bat
-launch.bat
-```
+On macOS the command is `python3`, not `python` — plain `python` does not exist
+there, and using it leaves you without a virtual environment and then a
+confusing `externally-managed-environment` error from pip.
 
 On first launch the app has nothing configured and will offer to open Settings.
-Everything is set up from there — no config file editing required. If you would
-rather start from a file, copy `config.example.json` to `config.json`.
+Everything is set up from there — no config file editing required.
 
 ## First-time setup per service
 

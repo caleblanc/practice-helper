@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.02
+
+Fixes to make a fresh install actually work, plus double-click installers.
+
+### Installers
+
+- `install.command` (macOS) and `install.bat` (Windows). Both find a suitable
+  Python, fetch the app if run on their own, build an isolated environment,
+  and install a real app with an icon — Applications on macOS, Desktop and
+  Start Menu on Windows.
+- Bootstrap installers rather than frozen bundles: PyTorch is several
+  gigabytes and unreliable to freeze, so the environment is built locally.
+
+### Fixes
+
+- **The install instructions were wrong and unrunnable.** The website showed a
+  single copyable block that used `python -m venv` (there is no `python` on
+  macOS, only `python3`) and put the macOS and Windows activation lines in the
+  same block, so pasting it ran both. The venv was never created and pip then
+  failed with `externally-managed-environment`. Split per platform, corrected,
+  and the styled `$` prompts and `#` comments are gone.
+- **CustomTkinter 6.0 compatibility.** A fresh install gets 6.0, which renamed
+  the private hit-test the trackpad-scrolling fix depended on, silently
+  disabling it. The fix now works on 5.x and 6.x, and falls back to walking the
+  widget tree itself rather than depending on a private name at all.
+
+### Changed
+
+- The Songsterr panel header names what it will actually produce:
+  "Guitar Pro", "MIDI", or "Guitar Pro & MIDI".
+
 ## 0.01 — first release
 
 First tagged release. Everything below is either new in this version or was

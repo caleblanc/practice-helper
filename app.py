@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Practice Helper — streaming audio, stem separation, and Songsterr scores."""
 
-__version__ = "0.01"
+__version__ = "0.02"
 
 import json
 import os
@@ -148,9 +148,32 @@ ctk.set_default_color_theme("dark-blue")
 # tk::PreciseScrollDeltas unpacks it, and the fraction arithmetic mirrors Tk's
 # own tk::ScrollByPixels so the direction matches every other app.
 
+def _owns_widget(frame, widget):
+    """Is *widget* inside this scrollable frame?
+
+    CustomTkinter's own hit-test is private and has already been renamed once
+    (check_if_master_is_canvas in 5.x, _check_if_valid_scroll in 6.x), so use
+    whichever exists and otherwise walk the master chain ourselves rather than
+    silently losing the binding on the next rename.
+    """
+    for name in ("check_if_master_is_canvas", "_check_if_valid_scroll"):
+        fn = getattr(frame, name, None)
+        if fn is not None:
+            try:
+                return bool(fn(widget))
+            except Exception:
+                break
+    canvas = frame._parent_canvas
+    while widget is not None:
+        if widget is canvas or widget is frame:
+            return True
+        widget = getattr(widget, "master", None)
+    return False
+
+
 def _touchpad_scroll(self, event):
     try:
-        if not self.check_if_master_is_canvas(event.widget):
+        if not _owns_widget(self, event.widget):
             return
         canvas = self._parent_canvas
         dx, dy = canvas.tk.call("tk::PreciseScrollDeltas", event.delta)
@@ -435,6 +458,7 @@ class SettingsDialog(ctk.CTkToplevel):
             self.app.am_panel.retheme()
         if hasattr(self.app, "ss_panel"):
             self.app.ss_panel.refresh_audio_options()
+            self.app.ss_panel.refresh_header()
         if hasattr(self.app, "_retheme"):
             self.app._retheme()
         self.destroy()
@@ -852,14 +876,30 @@ class SongsterrPanel(ctk.CTkFrame):
         self._instrument_vars: dict[str, ctk.BooleanVar] = {}
         self._build()
 
+    def _header_text(self) -> str:
+        """Name the formats this panel will actually produce."""
+        gp   = bool(getattr(self.app, "want_gp", True))
+        midi = bool(getattr(self.app, "want_midi", False))
+        if gp and midi:
+            return "Guitar Pro & MIDI"
+        if gp:
+            return "Guitar Pro"
+        if midi:
+            return "MIDI"
+        return "Songsterr"
+
+    def refresh_header(self):
+        self._title_lbl.configure(text=self._header_text())
+
     def _build(self):
         # Prominent panel header with format selector inline
         top = ctk.CTkFrame(self, fg_color=SURFACE2, height=44, corner_radius=0)
         top.pack(fill="x")
         top.pack_propagate(False)
-        ctk.CTkLabel(top, text="Songsterr", text_color=BLUE,
-                     font=ctk.CTkFont(size=14, weight="bold")).pack(side="left", padx=16)
-        # Output formats now live in Settings (Songsterr output formats).
+        self._title_lbl = ctk.CTkLabel(top, text=self._header_text(), text_color=BLUE,
+                                       font=ctk.CTkFont(size=14, weight="bold"))
+        self._title_lbl.pack(side="left", padx=16)
+        # Output formats live in Settings; the header names whichever are on.
         ctk.CTkFrame(self, height=2, fg_color=BLUE, corner_radius=0).pack(fill="x")
 
         body = ctk.CTkFrame(self, fg_color="transparent")

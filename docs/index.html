@@ -285,35 +285,54 @@ footer{border-top:var(--rule);padding:40px 48px;display:flex;align-items:center;
   <h2 class="section-title">Up in five minutes.</h2>
   <div class="install-grid">
     <div>
+      <div class="note" style="margin-bottom:20px">
+        <div class="note-title">Download and double-click</div>
+        <div class="note-body">
+          Grab the installer from the
+          <a href="https://github.com/caleblanc/practice-helper/releases/latest">latest release</a>
+          and double-click it. It sets up everything and installs the app —
+          no terminal required.
+          <ul style="margin:10px 0 0 18px;line-height:1.7">
+            <li><strong>macOS</strong> — <code>install.command</code>.
+                The first time, right-click it and choose <em>Open</em>, since it
+                is not code-signed.</li>
+            <li><strong>Windows</strong> — <code>install.bat</code>.
+                You also need <a href="https://www.python.org/downloads/">Python 3.11+</a>
+                with &ldquo;Add python.exe to PATH&rdquo; ticked, and
+                <code>ffmpeg</code>.</li>
+          </ul>
+        </div>
+      </div>
+
+      <p style="color:var(--muted);margin:22px 0 10px">Prefer the command line? Pick <em>one</em> block.</p>
+
       <div class="terminal" style="margin-bottom:20px">
         <div class="term-header">
           <div class="term-dots"><div class="term-dot"></div><div class="term-dot"></div><div class="term-dot"></div></div>
-          <span class="term-platform">macOS / Windows</span>
+          <span class="term-platform">macOS / Linux</span>
         </div>
         <div class="term-body">
-          <div><span class="t-c"># Clone and set up</span></div>
-          <div><span class="t-p">$ </span><span class="t-cmd">git clone https://github.com/caleblanc/practice-helper</span></div>
-          <div><span class="t-p">$ </span><span class="t-cmd">cd practice-helper</span></div>
-          <div><span class="t-p">$ </span><span class="t-cmd">python -m venv .venv</span></div>
-          <div>&nbsp;</div>
-          <div><span class="t-c"># macOS</span></div>
-          <div><span class="t-p">$ </span><span class="t-cmd">source .venv/bin/activate</span></div>
-          <div><span class="t-c"># Windows</span></div>
-          <div><span class="t-p">&gt; </span><span class="t-cmd">.venv\Scripts\activate</span></div>
-          <div>&nbsp;</div>
-          <div><span class="t-p">$ </span><span class="t-cmd">pip install -r requirements.txt</span></div>
-          <div><span class="t-p">$ </span><span class="t-cmd">python app.py</span></div>
-          <div><span class="t-out">✓ Practice Helper</span></div>
+          <div><span class="t-cmd">git clone https://github.com/caleblanc/practice-helper</span></div>
+          <div><span class="t-cmd">cd practice-helper</span></div>
+          <div><span class="t-cmd">python3 -m venv .venv</span></div>
+          <div><span class="t-cmd">source .venv/bin/activate</span></div>
+          <div><span class="t-cmd">pip install -r requirements.txt</span></div>
+          <div><span class="t-cmd">python3 app.py</span></div>
         </div>
       </div>
+
       <div class="terminal">
         <div class="term-header">
           <div class="term-dots"><div class="term-dot"></div><div class="term-dot"></div><div class="term-dot"></div></div>
-          <span class="term-platform">Windows — double-click launcher</span>
+          <span class="term-platform">Windows</span>
         </div>
         <div class="term-body">
-          <div><span class="t-c"># Or just run launch.bat</span></div>
-          <div><span class="t-p">&gt; </span><span class="t-cmd">launch.bat</span></div>
+          <div><span class="t-cmd">git clone https://github.com/caleblanc/practice-helper</span></div>
+          <div><span class="t-cmd">cd practice-helper</span></div>
+          <div><span class="t-cmd">python -m venv .venv</span></div>
+          <div><span class="t-cmd">.venv\Scripts\activate</span></div>
+          <div><span class="t-cmd">pip install -r requirements.txt</span></div>
+          <div><span class="t-cmd">python app.py</span></div>
         </div>
       </div>
     </div>
