@@ -22,12 +22,30 @@ STEPS      = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"]
 DRUM_ID    = 1024
 # Bump whenever the written output changes, so the app regenerates stale files
 # instead of silently serving one built by an older converter.
-WRITER_VERSION = "15"
+WRITER_VERSION = "16"
 STAMP = "songsterr_to_gp v" + WRITER_VERSION
 # A tremolo covering only a few subdivisions is a real burst (a drum double
 # stroke, e.g. a 16th played as two 32nds) and gets written out. Anything longer
 # is sustained tremolo picking, which is conventionally a slashed stem.
 TREMOLO_EXPAND_MAX = 4
+
+# Songsterr has no grace-note flag, so an ornament is encoded as a beat of
+# near-zero length immediately before the note it decorates -- a flam on the
+# snare comes through as a 1/128 hit followed by an eighth. Written literally
+# those clutter the staff and misreport the rhythm, so they become real Guitar
+# Pro grace notes instead. Guitar Pro writes them as a 32nd carrying
+# <GraceNotes>BeforeBeat</GraceNotes>, and crucially they do NOT count toward
+# the bar's duration.
+GRACE_MAX      = F(1, 128)   # at or below this, an ornament rather than a value
+GRACE_RATIO    = 4           # …provided what follows is at least this much longer
+GRACE_NOTEVALUE = (32, 0, False)
+
+
+def _is_grace(frac, nxt_frac):
+    """A very short beat is an ornament only if a much longer one follows it."""
+    if frac > GRACE_MAX or nxt_frac is None:
+        return False
+    return nxt_frac >= frac * GRACE_RATIO
 
 # Songsterr transcriptions often use only a couple of tom notes, and they cluster
 # (e.g. both floor toms). Spread whatever is actually used across GP's tom
@@ -190,15 +208,27 @@ def convert(revision, track_data, dest_path, notation="standard"):
             for vi, v in enumerate((meas.get("voices") or [])[:4]):
                 if not isinstance(v, dict): continue
                 seq, pos = [], F(0)
-                for b in (v.get("beats") or []):
-                    dur = b.get("duration")
-                    if not dur: continue
+                vbeats = [x for x in (v.get("beats") or []) if x.get("duration")]
+                for bx, b in enumerate(vbeats):
+                    dur = b["duration"]
                     frac = F(int(dur[0]), int(dur[1]))
-                    if pos + frac > tgt:
+                    # Look ahead: an ornament is only an ornament if something
+                    # substantially longer follows it.
+                    nxt = None
+                    if bx + 1 < len(vbeats):
+                        nd = vbeats[bx + 1]["duration"]
+                        nxt = F(int(nd[0]), int(nd[1]))
+                    grace = _is_grace(frac, nxt)
+                    if grace:
+                        # Occupies no time in the bar, so it is neither clipped
+                        # at the barline nor fitted to the duration table.
+                        stats["grace_notes"] += 1
+                        nv, dots, tup = GRACE_NOTEVALUE
+                    elif pos + frac > tgt:
                         frac = tgt - pos
                         stats["truncated_at_barline"] += 1
                         if frac <= 0: break
-                    if frac not in EXACT:
+                    if not grace and frac not in EXACT:
                         try:
                             filled = _fill(pos, pos+frac)
                         except ValueError:
@@ -210,9 +240,10 @@ def convert(revision, track_data, dest_path, notation="standard"):
                             stats["duration_rounded"] += 1
                             filled = [EXACT[min(EXACT)]]
                         for nv,dots,tup in filled:
-                            seq.append(((nv,dots,tup), [], "MF", ""))
+                            seq.append(((nv,dots,tup), [], "MF", "", False))
                         stats["unrepresentable_duration"] += 1; pos += frac; continue
-                    nv,dots,tup = EXACT[frac]
+                    if not grace:
+                        nv,dots,tup = EXACT[frac]
                     ns = []
                     if not b.get("rest"):
                         for n in (b.get("notes") or []):
@@ -294,7 +325,7 @@ def convert(revision, track_data, dest_path, notation="standard"):
                     # subdivision is real (and audible) instead of a slashed stem.
                     sub = F(int(tv[0]), int(tv[1])) if tv else None
                     reps = int(frac / sub) if sub and sub > 0 and frac % sub == 0 else 0
-                    if 1 < reps <= TREMOLO_EXPAND_MAX and sub in EXACT:
+                    if not grace and 1 < reps <= TREMOLO_EXPAND_MAX and sub in EXACT:
                         snv, sdots, stup = EXACT[sub]
                         for r in range(reps):
                             copy = ns if r == 0 else [dict(x) for x in ns]
@@ -303,20 +334,22 @@ def convert(revision, track_data, dest_path, notation="standard"):
                                     if x["k"] == "p":
                                         x.update(tie_dst=False, tie_org=False,
                                                  hopo_dst=False, hopo_org=False)
-                            seq.append(((snv, sdots, stup), copy, dy, ""))
+                            seq.append(((snv, sdots, stup), copy, dy, "", False))
                         stats["tremolo_expanded"] += reps
                     else:
                         if tv: stats["tremolo_as_picking"] += 1
                         seq.append(((nv,dots,tup), ns, dy,
-                                    "%d/%d" % (int(tv[0]), int(tv[1])) if tv else ""))
-                    pos += frac
+                                    "%d/%d" % (int(tv[0]), int(tv[1])) if tv else "",
+                                    grace))
+                    if not grace:
+                        pos += frac
                 if pos < tgt:
                     for nv,dots,tup in _fill(pos, tgt):
-                        seq.append(((nv,dots,tup), [], "MF", ""))
+                        seq.append(((nv,dots,tup), [], "MF", "", False))
                 if seq:
                     voices.append(seq); slot.append(len(voices)-1)
             if not slot:
-                seq = [((nv,dots,tup), [], "MF", "") for nv,dots,tup in _fill(F(0), tgt)]
+                seq = [((nv,dots,tup), [], "MF", "", False) for nv,dots,tup in _fill(F(0), tgt)]
                 voices.append(seq); slot.append(len(voices)-1)
             while len(slot) < 4: slot.append(-1)
             bars.append((slot, clef)); tbars.append(len(bars)-1)
@@ -329,8 +362,8 @@ def convert(revision, track_data, dest_path, notation="standard"):
                     d.get("accent", 0), d.get("tie_dst", False), d.get("tie_org", False))
         return ("p", d["gs"], d["fr"], d["midi"], d["art"],
                 d["tie_dst"], d["tie_org"], d["hopo_dst"], d["hopo_org"])
-    voices = [[bid((rid(rk), tuple(nid(_notekey(x)) for x in ns), dy, tr))
-               for rk, ns, dy, tr in seq] for seq in voices]
+    voices = [[bid((rid(rk), tuple(nid(_notekey(x)) for x in ns), dy, tr, gr))
+               for rk, ns, dy, tr, gr in seq] for seq in voices]
 
     # ---- tracks XML
     txml, chan = [], 0
@@ -377,8 +410,10 @@ def convert(revision, track_data, dest_path, notation="standard"):
         X.append('<Voice id="%d"><Beats>%s</Beats></Voice>' % (i, " ".join(map(str,seq))))
     X.append("</Voices>")
     X.append("<Beats>")
-    for (r,ns,dy,trem),b in sorted(beatpool.items(), key=lambda kv: kv[1]):
-        X.append('<Beat id="%d"><Dynamic>%s</Dynamic><Rhythm ref="%d" />' % (b,dy,r))
+    for (r,ns,dy,trem,grace),b in sorted(beatpool.items(), key=lambda kv: kv[1]):
+        X.append('<Beat id="%d">' % b)
+        if grace: X.append("<GraceNotes>BeforeBeat</GraceNotes>")
+        X.append('<Dynamic>%s</Dynamic><Rhythm ref="%d" />' % (dy,r))
         if trem: X.append("<Tremolo>%s</Tremolo>" % trem)
         if ns: X.append("<Notes>%s</Notes>" % " ".join(map(str,ns)))
         X.append("</Beat>")
