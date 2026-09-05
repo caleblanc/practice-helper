@@ -54,14 +54,20 @@ The interface takes on the brand colour of whichever service is selected.
 
 ### Download the installer (recommended)
 
-Grab it from the [latest release](https://github.com/caleblanc/practice-helper/releases/latest)
-and double-click. It builds an isolated Python environment and installs the app
-— no terminal needed.
+Grab the zip for your platform from the
+[latest release](https://github.com/caleblanc/practice-helper/releases/latest),
+unzip it, and run it. It builds an isolated Python environment and installs the
+app — no terminal needed.
 
-- **macOS** — `install.command`. The first time, **right-click it and choose
-  Open**, since it is not code-signed. It installs *Practice Helper.app* into
-  your Applications folder.
-- **Windows** — `install.bat`. It creates Desktop and Start Menu shortcuts.
+- **macOS** — unzip, then **right-click `install.command` and choose Open**.
+  A plain double-click is refused the first time because the installer is not
+  code-signed. It installs *Practice Helper.app* into your Applications folder.
+- **Windows** — unzip and double-click `install.bat`, keeping the `scripts`
+  folder beside it. It creates Desktop and Start Menu shortcuts.
+
+They are zipped rather than offered as bare files because GitHub strips the
+executable bit from release assets, which would leave `install.command`
+opening in TextEdit instead of running.
 
 The installer needs [Python 3.11+](https://www.python.org/downloads/) already
 present (on Windows, tick **Add python.exe to PATH** when installing it). It

@@ -288,16 +288,19 @@ footer{border-top:var(--rule);padding:40px 48px;display:flex;align-items:center;
       <div class="note" style="margin-bottom:20px">
         <div class="note-title">Download and double-click</div>
         <div class="note-body">
-          Grab the installer from the
-          <a href="https://github.com/caleblanc/practice-helper/releases/latest">latest release</a>
-          and double-click it. It sets up everything and installs the app —
+          Grab the installer for your platform from the
+          <a href="https://github.com/caleblanc/practice-helper/releases/latest">latest release</a>,
+          unzip it, and run it. It sets up everything and installs the app —
           no terminal required.
           <ul style="margin:10px 0 0 18px;line-height:1.7">
-            <li><strong>macOS</strong> — <code>install.command</code>.
-                The first time, right-click it and choose <em>Open</em>, since it
-                is not code-signed.</li>
-            <li><strong>Windows</strong> — <code>install.bat</code>.
-                You also need <a href="https://www.python.org/downloads/">Python 3.11+</a>
+            <li><strong>macOS</strong> — unzip, then <em>right-click</em>
+                <code>install.command</code> and choose <em>Open</em>.
+                A plain double-click is refused the first time because the
+                installer is not code-signed.</li>
+            <li><strong>Windows</strong> — unzip and double-click
+                <code>install.bat</code>, keeping the <code>scripts</code> folder
+                beside it. You also need
+                <a href="https://www.python.org/downloads/">Python 3.11+</a>
                 with &ldquo;Add python.exe to PATH&rdquo; ticked, and
                 <code>ffmpeg</code>.</li>
           </ul>
