@@ -25,6 +25,7 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).parent))
 import songsterr as sapi
 import providers
+import match
 import converter as conv
 import midi_to_gp
 import songsterr_to_gp
@@ -81,6 +82,7 @@ def find_tool(name: str, extra: str = "") -> str:
     return shutil.which(name) or ""
 
 DRUM_INSTRUMENT_ID = 1024
+TABS_PER_SONG = 3        # tabs shown under each streaming result
 
 
 
@@ -656,261 +658,175 @@ class LogPanel(ctk.CTkFrame):
         self._line.configure(text="")
 
 
-# ── Streaming panel ───────────────────────────────────────────────────────────
+# ── Results browser ───────────────────────────────────────────────────────────
+# One list, not two. A streaming track and the tabs for that same song belong
+# together, so each track row carries its own matched tabs beneath it.
 
-class TrackRow(ctk.CTkFrame):
-    def __init__(self, parent, track: dict, on_select):
-        super().__init__(parent, fg_color="transparent", corner_radius=6, cursor="hand2")
-        self.track = track
+
+class TabRow(ctk.CTkFrame):
+    """A Songsterr tab, indented under the track it belongs to."""
+
+    def __init__(self, parent, tab: dict, on_select):
+        super().__init__(parent, fg_color="transparent", corner_radius=5, cursor="hand2")
+        self.tab = tab
         self._on_select = on_select
-        self._selected = False
         self._build()
         _bind_click(self, lambda _: self._on_select(self))
 
     def _build(self):
-        self.pack(fill="x", pady=1)
-        name   = self.track.get("trackName", "Unknown")
-        artist = self.track.get("artistName", "")
-        album  = self.track.get("collectionName", "")
-        meta   = f"{artist}  ·  {album}" if album else artist
-        inner  = ctk.CTkFrame(self, fg_color="transparent")
-        inner.pack(fill="x", padx=10, pady=6)
-        ctk.CTkLabel(inner, text=name, anchor="w",
-                     font=ctk.CTkFont(size=13, weight="bold")).pack(fill="x")
-        ctk.CTkLabel(inner, text=meta, anchor="w",
-                     text_color=MUTED, font=("", 12)).pack(fill="x")
+        self.pack(fill="x", padx=(30, 0), pady=1)
+        icons, seen = [], set()
+        for t in self.tab.get("tracks", []):
+            _cat, icon = _instrument_category(t.get("instrumentId", -1))
+            if icon not in seen:
+                icons.append(icon)
+                seen.add(icon)
+        inner = ctk.CTkFrame(self, fg_color="transparent")
+        inner.pack(fill="x", padx=8, pady=3)
+        ctk.CTkLabel(inner, text="↳", text_color=MUTED,
+                     font=("", 11), width=14).pack(side="left")
+        ctk.CTkLabel(inner, text=self.tab.get("title", "Unknown"), anchor="w",
+                     text_color=BLUE, font=("", 11)).pack(side="left", fill="x", expand=True)
+        if icons:
+            ctk.CTkLabel(inner, text=" ".join(icons), font=("", 11)).pack(side="right")
 
     def set_selected(self, v: bool):
-        self._selected = v
-        self.configure(
-            fg_color=SURFACE if v else "transparent",
-            border_width=1 if v else 0,
-            border_color=BLUE if v else BORDER,
-        )
+        self.configure(fg_color=SS_TINT if v else "transparent",
+                       border_width=1 if v else 0,
+                       border_color=BLUE if v else BORDER)
 
 
-class StreamingPanel(ctk.CTkFrame):
-    def __init__(self, parent, app: "App"):
-        super().__init__(parent, fg_color=BG, corner_radius=0)
-        self.app = app
-        self._tracks: list[dict] = []
-        self._rows: list[TrackRow] = []
-        self._selected_idx: int | None = None
-        self._var_orig = ctk.BooleanVar(value=True)
-        self._var_od   = ctk.BooleanVar(value=True)
-        self._var_nd   = ctk.BooleanVar(value=True)
+class TrackRow(ctk.CTkFrame):
+    """A streaming track, with the tabs matched to it nested underneath."""
+
+    def __init__(self, parent, track: dict, accent, on_select_track, on_select_tab):
+        super().__init__(parent, fg_color="transparent", corner_radius=6)
+        self.track = track
+        self._accent = accent
+        self._on_select_track = on_select_track
+        self._on_select_tab = on_select_tab
+        self.tab_rows: list = []
         self._build()
 
     def _build(self):
+        self.pack(fill="x", pady=(2, 0))
+        self._head = ctk.CTkFrame(self, fg_color="transparent",
+                                  corner_radius=6, cursor="hand2")
+        self._head.pack(fill="x")
+        inner = ctk.CTkFrame(self._head, fg_color="transparent")
+        inner.pack(fill="x", padx=10, pady=5)
+        ctk.CTkLabel(inner, text=self.track.get("trackName", "Unknown"), anchor="w",
+                     font=ctk.CTkFont(size=13, weight="bold")).pack(fill="x")
+        artist = self.track.get("artistName", "")
+        album = self.track.get("collectionName", "")
+        ctk.CTkLabel(inner, text=f"{artist}  ·  {album}" if album else artist,
+                     anchor="w", text_color=MUTED, font=("", 11)).pack(fill="x")
+        _bind_click(self._head, lambda _: self._on_select_track(self))
+
+        self._tabs_host = ctk.CTkFrame(self, fg_color="transparent")
+        self._tabs_host.pack(fill="x")
+        self._note = ctk.CTkLabel(self._tabs_host, text="   looking for tabs…",
+                                  text_color=MUTED, anchor="w", font=("", 10))
+        self._note.pack(fill="x", padx=40, pady=(0, 2))
+
+    def set_tabs(self, tabs: list):
+        for w in self._tabs_host.winfo_children():
+            w.destroy()
+        self.tab_rows = []
+        if not tabs:
+            ctk.CTkLabel(self._tabs_host, text="   no tab found", text_color=MUTED,
+                         anchor="w", font=("", 10)).pack(fill="x", padx=40, pady=(0, 2))
+            return
+        for tb in tabs:
+            self.tab_rows.append(TabRow(self._tabs_host, tb, self._on_select_tab))
+
+    def set_selected(self, v: bool):
+        self._head.configure(fg_color=SURFACE if v else "transparent",
+                             border_width=1 if v else 0,
+                             border_color=self._accent if v else BORDER)
+
+
+class BrowserPanel(ctk.CTkFrame):
+    """The results browser.
+
+    Implements both the streaming and the score interfaces, so the processing
+    pipeline can go on asking for `selected_track` and `selected_song` without
+    caring that they now come from a single widget.
+    """
+
+    _EXTRA = [("full", "Full")]
+
+    def __init__(self, parent, app: "App"):
+        super().__init__(parent, fg_color=BG, corner_radius=0)
+        self.app = app
+        self._tracks: list = []
+        self._rows: list = []
+        self._sel_track = None
+        self._sel_tab = None
+        self._selected_rev = None
+        self._stem_vars = {}
+        self._combo_vars = {}
+        self._audio_vars = {}
+        self._instrument_vars = {}
+        self._build()
+
+    # ── layout ────────────────────────────────────────────────────────────────
+
+    def _build(self):
         prov = self.app.provider()
-        # Prominent panel header, carrying the service switcher
         top = ctk.CTkFrame(self, fg_color=SURFACE2, height=44, corner_radius=0)
         top.pack(fill="x")
         top.pack_propagate(False)
         self._title_lbl = ctk.CTkLabel(top, text=prov.name, text_color=prov.accent,
                                        font=ctk.CTkFont(size=14, weight="bold"))
-        self._title_lbl.pack(side="left", padx=16)
+        self._title_lbl.pack(side="left", padx=(16, 6))
         self._prov_menu = ctk.CTkOptionMenu(
-            top, width=124, height=26, font=("", 11),
+            top, width=120, height=26, font=("", 11),
             values=[providers.get(x).name for x in providers.ORDER],
             fg_color=SURFACE, button_color=prov.accent, button_hover_color=prov.dim,
             command=self._on_provider_pick)
         self._prov_menu.set(prov.name)
-        self._prov_menu.pack(side="right", padx=12)
+        self._prov_menu.pack(side="left")
+        self._fmt_lbl = ctk.CTkLabel(top, text=self._header_text(), text_color=BLUE,
+                                     font=ctk.CTkFont(size=13, weight="bold"))
+        self._fmt_lbl.pack(side="right", padx=16)
         self._rule = ctk.CTkFrame(self, height=2, fg_color=prov.accent, corner_radius=0)
         self._rule.pack(fill="x")
 
         body = ctk.CTkFrame(self, fg_color="transparent")
         body.pack(fill="both", expand=True)
-        self._body = body
 
-        self._scroll = ctk.CTkScrollableFrame(body, fg_color="transparent",
-                                               scrollbar_button_color=BORDER)
-        self._scroll.pack(side="right", fill="both", expand=True, padx=8, pady=(0, 0))
-
-        self._empty_lbl = ctk.CTkLabel(self._scroll, text="No results", text_color=MUTED)
-        self._empty_lbl.pack(pady=30)
-
-        # Checkboxes — shown only when a track is selected
-        self._check_frame = CollapsibleColumn(body, prov.accent, prov.tint, "Options")
+        self._check_frame = CollapsibleColumn(body, prov.accent, prov.tint, "Audio")
         self._check_frame.pack(side="left", fill="y", padx=(8, 0), pady=(0, 4))
-        self._stem_vars: dict[str, ctk.BooleanVar] = {}
-        self._combo_vars: dict[str, ctk.BooleanVar] = {}
         self._stem_row = ctk.CTkFrame(self._check_frame.body, fg_color="transparent")
         self._stem_row.pack(fill="x", pady=(4, 2))
         self._combo_row = ctk.CTkFrame(self._check_frame.body, fg_color="transparent")
         self._combo_row.pack(fill="x", pady=(6, 4))
+
+        self._score_frame = CollapsibleColumn(body, BLUE, SS_TINT, "Score")
+        self._score_frame.pack(side="left", fill="y", padx=(6, 0), pady=(0, 4))
+        self._check_rows_frame = ctk.CTkFrame(self._score_frame.body, fg_color="transparent")
+        self._check_rows_frame.pack(fill="x")
+        self._audio_frame = ctk.CTkFrame(self._score_frame.body, fg_color="transparent")
+        self._audio_frame.pack(fill="x", pady=(12, 2))
+
         self.refresh_stem_options()
+        self.refresh_audio_options()
 
-    _EXTRA = [("full", "Full")]
+        self._scroll = ctk.CTkScrollableFrame(body, fg_color="transparent",
+                                              scrollbar_button_color=BORDER)
+        self._scroll.pack(side="right", fill="both", expand=True, padx=8)
+        self._empty_lbl = ctk.CTkLabel(self._scroll, text="No results", text_color=MUTED)
+        self._empty_lbl.pack(pady=30)
 
-    def _on_provider_pick(self, name: str):
-        for pid in providers.ORDER:
-            if providers.get(pid).name == name:
-                self.app.set_provider(pid)
-                return
+        self._rev_label = ctk.CTkLabel(self, text="", text_color=MUTED,
+                                       font=("", 11), anchor="w")
+        self._rev_label.pack(fill="x", padx=14, pady=(4, 2))
 
-    def retheme(self):
-        """Repaint everything that carries the service's brand colour."""
-        prov = self.app.provider()
-        self._title_lbl.configure(text=prov.name, text_color=prov.accent)
-        self._prov_menu.configure(button_color=prov.accent, button_hover_color=prov.dim)
-        self._prov_menu.set(prov.name)
-        self._rule.configure(fg_color=prov.accent)
-        self._check_frame.set_accent(prov.accent, prov.tint)
-        self.refresh_stem_options()   # rebuilds the two captions in the new colour
-        self.populate([])             # results belong to the old service
-
-    def refresh_stem_options(self):
-        """Rebuild the stem checkboxes for the model chosen in Settings."""
-        sources = STEM_SOURCES.get(getattr(self.app, "demucs_model", "htdemucs"),
-                                   STEM_SOURCES["htdemucs"])
-        opts = self._EXTRA + [(s, s.capitalize()) for s in sources]
-
-        for w in self._stem_row.winfo_children():
-            w.destroy()
-        ctk.CTkLabel(self._stem_row, text="Download",
-                     text_color=self.app.provider().accent,
-                     font=("", 10), anchor="w").pack(fill="x", padx=2, pady=(0, 2))
-        kept = dict(self._stem_vars); self._stem_vars.clear()
-        for key, text in opts:
-            saved = getattr(self.app, "stem_sel", None) or {}
-            var = kept.get(key) or ctk.BooleanVar(
-                value=bool(saved.get(key, key in ("full", "drums"))))
-            var.trace_add("write", lambda *_: self._remember())
-            self._stem_vars[key] = var
-            ctk.CTkCheckBox(self._stem_row, text=text, variable=var,
-                            font=("", 11), checkbox_width=15, checkbox_height=15
-                            ).pack(fill="x", anchor="w", padx=2, pady=1)
-
-        for w in self._combo_row.winfo_children():
-            w.destroy()
-        ctk.CTkLabel(self._combo_row, text="Combined",
-                     text_color=self.app.provider().accent,
-                     font=("", 10), anchor="w").pack(fill="x", padx=2, pady=(0, 2))
-        kept = dict(self._combo_vars); self._combo_vars.clear()
-        for src in sources:
-            saved = getattr(self.app, "combo_sel", None) or {}
-            var = kept.get(src) or ctk.BooleanVar(value=bool(saved.get(src, False)))
-            var.trace_add("write", lambda *_: self._remember())
-            self._combo_vars[src] = var
-            ctk.CTkCheckBox(self._combo_row, text=src.capitalize(), variable=var,
-                            font=("", 11), checkbox_width=15, checkbox_height=15
-                            ).pack(fill="x", anchor="w", padx=2, pady=1)
-
-    def _remember(self):
-        """Persist the stem / combined tick boxes so they survive a restart."""
-        app = self.app
-        sel = dict(getattr(app, "stem_sel", None) or {})
-        sel.update({k: bool(v.get()) for k, v in self._stem_vars.items()})
-        app.stem_sel = sel
-        combo = dict(getattr(app, "combo_sel", None) or {})
-        combo.update({k: bool(v.get()) for k, v in self._combo_vars.items()})
-        app.combo_sel = combo
-        if hasattr(app, "persist"):
-            app.persist()
-
-    def selected_stems(self) -> list[str]:
-        return [k for k, v in self._stem_vars.items()
-                if v.get() and k not in ("full", "drums")]
-
-    def combined_stems(self) -> list[str]:
-        return [k for k, v in self._combo_vars.items() if v.get()]
-
-    def populate(self, tracks: list[dict]):
-        self._tracks = tracks
-        self._rows = []
-        self._selected_idx = None
-        for w in self._scroll.winfo_children():
-            w.destroy()
-        if not tracks:
-            self._empty_lbl = ctk.CTkLabel(self._scroll, text="No results", text_color=MUTED)
-            self._empty_lbl.pack(pady=30)
-            return
-        for t in tracks:
-            row = TrackRow(self._scroll, t, self._on_row_click)
-            self._rows.append(row)
-
-    def _on_row_click(self, row: TrackRow):
-        idx = self._rows.index(row)
-        if self._selected_idx == idx:
-            row.set_selected(False)
-            self._selected_idx = None
-        else:
-            if self._selected_idx is not None:
-                self._rows[self._selected_idx].set_selected(False)
-            self._selected_idx = idx
-            row.set_selected(True)
-
-    @property
-    def selected_track(self) -> dict | None:
-        return self._tracks[self._selected_idx] if self._selected_idx is not None else None
-
-    @property
-    def download_original(self) -> bool:
-        return self._stem_vars['full'].get()
-
-    @property
-    def download_od(self) -> bool:
-        return self._stem_vars['drums'].get()
-
-    @property
-    def download_nd(self) -> bool:
-        # "No drums" is gone: tick everything except Drums under "Combined".
-        return False
-
-
-# ── Songsterr panel ───────────────────────────────────────────────────────────
-
-class SSResultRow(ctk.CTkFrame):
-    def __init__(self, parent, song: dict, on_select):
-        super().__init__(parent, fg_color="transparent", corner_radius=6, cursor="hand2")
-        self.song = song
-        self._on_select = on_select
-        self._selected = False
-        self._build()
-        _bind_click(self, lambda _: self._on_select(self))
-
-    def _build(self):
-        self.pack(fill="x", pady=1)
-        name   = self.song.get("title", "Unknown")
-        artist = self.song.get("artist", "")
-        seen_icons: list[str] = []
-        seen_set: set[str] = set()
-        for t in self.song.get("tracks", []):
-            _, icon = _instrument_category(t.get("instrumentId", -1))
-            if icon not in seen_set:
-                seen_icons.append(icon)
-                seen_set.add(icon)
-        icons = "  " + " ".join(seen_icons) if seen_icons else ""
-        label = f"{artist} – {name}{icons}"
-        inner = ctk.CTkFrame(self, fg_color="transparent")
-        inner.pack(fill="x", padx=10, pady=8)
-        ctk.CTkLabel(inner, text=label, anchor="w", font=("", 12)).pack(fill="x")
-
-    def set_selected(self, v: bool):
-        self._selected = v
-        self.configure(
-            fg_color=SURFACE if v else "transparent",
-            border_width=1 if v else 0,
-            border_color=BLUE if v else BORDER,
-        )
-
-
-class SongsterrPanel(ctk.CTkFrame):
-    def __init__(self, parent, app: "App"):
-        super().__init__(parent, fg_color=BG, corner_radius=0)
-        self.app = app
-        self._songs: list[dict] = []
-        self._rows: list[SSResultRow] = []
-        self._selected_idx: int | None = None
-        self._selected_rev: dict | None = None
-        self._instrument_vars: dict[str, ctk.BooleanVar] = {}
-        self._build()
+    # ── theming ───────────────────────────────────────────────────────────────
 
     def _header_text(self) -> str:
-        """Name the formats this panel will actually produce."""
-        gp   = bool(getattr(self.app, "want_gp", True))
+        gp = bool(getattr(self.app, "want_gp", True))
         midi = bool(getattr(self.app, "want_midi", False))
         if gp and midi:
             return "Guitar Pro & MIDI"
@@ -921,74 +837,83 @@ class SongsterrPanel(ctk.CTkFrame):
         return "Songsterr"
 
     def refresh_header(self):
-        self._title_lbl.configure(text=self._header_text())
+        self._fmt_lbl.configure(text=self._header_text())
 
-    def _build(self):
-        # Prominent panel header with format selector inline
-        top = ctk.CTkFrame(self, fg_color=SURFACE2, height=44, corner_radius=0)
-        top.pack(fill="x")
-        top.pack_propagate(False)
-        self._title_lbl = ctk.CTkLabel(top, text=self._header_text(), text_color=BLUE,
-                                       font=ctk.CTkFont(size=14, weight="bold"))
-        self._title_lbl.pack(side="left", padx=16)
-        # Output formats live in Settings; the header names whichever are on.
-        ctk.CTkFrame(self, height=2, fg_color=BLUE, corner_radius=0).pack(fill="x")
+    def _on_provider_pick(self, name: str):
+        for pid in providers.ORDER:
+            if providers.get(pid).name == name:
+                self.app.set_provider(pid)
+                return
 
-        body = ctk.CTkFrame(self, fg_color="transparent")
-        body.pack(fill="both", expand=True)
+    def retheme(self):
+        prov = self.app.provider()
+        self._title_lbl.configure(text=prov.name, text_color=prov.accent)
+        self._prov_menu.configure(button_color=prov.accent, button_hover_color=prov.dim)
+        self._prov_menu.set(prov.name)
+        self._rule.configure(fg_color=prov.accent)
+        self._check_frame.set_accent(prov.accent, prov.tint)
+        self.refresh_stem_options()
+        self.populate([])
 
-        # Track selector — a vertical column to the left of the song titles.
-        # Packed only once a song is selected.
-        self._check_frame = CollapsibleColumn(body, BLUE, SS_TINT, "Tracks")
-        self._check_frame.pack(side="left", fill="y", padx=(8, 0), pady=(0, 4))
-        self._check_rows_frame = ctk.CTkFrame(self._check_frame.body, fg_color="transparent")
-        self._check_rows_frame.pack(fill="x")
-        self._audio_frame = ctk.CTkFrame(self._check_frame.body, fg_color="transparent")
-        self._audio_frame.pack(fill="x", pady=(12, 2))
-        self._audio_vars: dict[str, ctk.BooleanVar] = {}
-        self.refresh_audio_options()
+    # ── option columns ────────────────────────────────────────────────────────
 
-        self._scroll = ctk.CTkScrollableFrame(body, fg_color="transparent",
-                                               scrollbar_button_color=BORDER)
-        self._scroll.pack(side="right", fill="both", expand=True, padx=8, pady=(0, 0))
-        self._empty_lbl = ctk.CTkLabel(self._scroll, text="No results", text_color=MUTED)
-        self._empty_lbl.pack(pady=30)
-
-        self._rev_label = ctk.CTkLabel(self, text="", text_color=MUTED,
-                                        font=("", 11), wraplength=340)
-        self._rev_label.pack(fill="x", padx=14, pady=(6, 2))
-
-    def populate(self, songs: list[dict]):
-        self._songs = songs
-        self._rows = []
-        self._selected_idx = None
-        self._selected_rev = None
-        self._instrument_vars.clear()
-        self._rev_label.configure(text="")
-        for w in self._scroll.winfo_children():
+    def refresh_stem_options(self):
+        sources = STEM_SOURCES.get(getattr(self.app, "demucs_model", "htdemucs"),
+                                   STEM_SOURCES["htdemucs"])
+        accent = self.app.provider().accent
+        for w in self._stem_row.winfo_children():
             w.destroy()
-        if not songs:
-            self._empty_lbl = ctk.CTkLabel(self._scroll, text="No results", text_color=MUTED)
-            self._empty_lbl.pack(pady=30)
-            return
-        for s in songs:
-            row = SSResultRow(self._scroll, s, self._on_row_click)
-            self._rows.append(row)
+        ctk.CTkLabel(self._stem_row, text="Download", text_color=accent,
+                     font=("", 10), anchor="w").pack(fill="x", padx=2, pady=(0, 2))
+        kept = dict(self._stem_vars)
+        self._stem_vars.clear()
+        for key, text in self._EXTRA + [(s, s.capitalize()) for s in sources]:
+            saved = getattr(self.app, "stem_sel", None) or {}
+            var = kept.get(key) or ctk.BooleanVar(
+                value=bool(saved.get(key, key in ("full", "drums"))))
+            var.trace_add("write", lambda *_: self._remember())
+            self._stem_vars[key] = var
+            ctk.CTkCheckBox(self._stem_row, text=text, variable=var, font=("", 11),
+                            checkbox_width=15, checkbox_height=15
+                            ).pack(fill="x", anchor="w", padx=2, pady=1)
+
+        for w in self._combo_row.winfo_children():
+            w.destroy()
+        ctk.CTkLabel(self._combo_row, text="Combined", text_color=accent,
+                     font=("", 10), anchor="w").pack(fill="x", padx=2, pady=(0, 2))
+        kept = dict(self._combo_vars)
+        self._combo_vars.clear()
+        for src in sources:
+            saved = getattr(self.app, "combo_sel", None) or {}
+            var = kept.get(src) or ctk.BooleanVar(value=bool(saved.get(src, False)))
+            var.trace_add("write", lambda *_: self._remember())
+            self._combo_vars[src] = var
+            ctk.CTkCheckBox(self._combo_row, text=src.capitalize(), variable=var,
+                            font=("", 11), checkbox_width=15, checkbox_height=15
+                            ).pack(fill="x", anchor="w", padx=2, pady=1)
+
+    def _remember(self):
+        app = self.app
+        sel = dict(getattr(app, "stem_sel", None) or {})
+        sel.update({k: bool(v.get()) for k, v in self._stem_vars.items()})
+        app.stem_sel = sel
+        combo = dict(getattr(app, "combo_sel", None) or {})
+        combo.update({k: bool(v.get()) for k, v in self._combo_vars.items()})
+        app.combo_sel = combo
+        if hasattr(app, "persist"):
+            app.persist()
 
     def refresh_audio_options(self):
-        """Embed-audio controls, rebuilt when the separation model changes."""
         for w in self._audio_frame.winfo_children():
             w.destroy()
         ctk.CTkFrame(self._audio_frame, height=1, fg_color=BLUE).pack(fill="x", pady=(0, 6))
         ctk.CTkLabel(self._audio_frame, text="Embed Audio", text_color=BLUE,
                      font=("", 10), anchor="w").pack(fill="x", padx=2, pady=(0, 2))
-
         self._var_gpaudio = ctk.BooleanVar(value=bool(getattr(self.app, "gp_with_audio", False)))
         self._var_gpaudio.trace_add("write", lambda *_: self._remember_audio())
         ctk.CTkCheckBox(self._audio_frame, text="Include audio", variable=self._var_gpaudio,
                         font=("", 11), checkbox_width=15, checkbox_height=15
                         ).pack(fill="x", anchor="w", padx=2, pady=1)
-
         saved = getattr(self.app, "gp_audio_sel", None) or {}
         kept = dict(self._audio_vars)
         self._audio_vars.clear()
@@ -1013,77 +938,144 @@ class SongsterrPanel(ctk.CTkFrame):
         for w in self._check_rows_frame.winfo_children():
             w.destroy()
         self._instrument_vars.clear()
-
-        tracks = song.get("tracks", [])
-        seen_cats: list[tuple[str, str]] = []
-        seen_set: set[str] = set()
-        for t in tracks:
+        seen, cats = set(), []
+        for t in song.get("tracks", []):
             cat, icon = _instrument_category(t.get("instrumentId", -1))
-            if cat not in seen_set:
-                seen_cats.append((cat, icon))
-                seen_set.add(cat)
-
-        if not seen_cats:
-            return
-
-        for cat, icon in seen_cats:
+            if cat not in seen:
+                cats.append((cat, icon))
+                seen.add(cat)
+        for cat, icon in cats:
             var = ctk.BooleanVar(value=True)
             self._instrument_vars[cat] = var
             ctk.CTkCheckBox(self._check_rows_frame, text=f"{icon} {cat}", variable=var,
                             font=("", 11), checkbox_width=15, checkbox_height=15
                             ).pack(fill="x", anchor="w", padx=2, pady=1)
 
+    # ── results ───────────────────────────────────────────────────────────────
 
-    def _on_row_click(self, row: SSResultRow):
-        idx = self._rows.index(row)
-        if self._selected_idx == idx:
-            row.set_selected(False)
-            self._selected_idx = None
-            self._selected_rev = None
-            self._rev_label.configure(text="")
-            self._instrument_vars.clear()
-            for w in self._check_rows_frame.winfo_children():
-                w.destroy()
-            return
-        if self._selected_idx is not None:
-            self._rows[self._selected_idx].set_selected(False)
-        self._selected_idx = idx
+    def populate(self, tracks: list):
+        self._tracks = tracks
+        self._rows = []
+        self._sel_track = None
+        self._sel_tab = None
         self._selected_rev = None
+        self._instrument_vars.clear()
+        self._rev_label.configure(text="")
+        for w in self._scroll.winfo_children():
+            w.destroy()
+        for w in self._check_rows_frame.winfo_children():
+            w.destroy()
+        if not tracks:
+            self._empty_lbl = ctk.CTkLabel(self._scroll, text="No results", text_color=MUTED)
+            self._empty_lbl.pack(pady=30)
+            return
+        accent = self.app.provider().accent
+        for t in tracks:
+            self._rows.append(TrackRow(self._scroll, t, accent,
+                                       self._on_track_click, self._on_tab_click))
+
+    def set_tabs_for(self, index: int, tabs: list):
+        if 0 <= index < len(self._rows):
+            self._rows[index].set_tabs(tabs)
+
+    # ── selection ─────────────────────────────────────────────────────────────
+
+    def _clear_tab_selection(self):
+        if self._sel_tab is not None:
+            self._sel_tab.set_selected(False)
+        self._sel_tab = None
+        self._selected_rev = None
+
+    def _on_track_click(self, row):
+        idx = self._rows.index(row)
+        if self._sel_track == idx and self._sel_tab is None:
+            row.set_selected(False)
+            self._sel_track = None
+            return
+        if self._sel_track is not None:
+            self._rows[self._sel_track].set_selected(False)
+        self._clear_tab_selection()
+        self._rev_label.configure(text="")
+        for w in self._check_rows_frame.winfo_children():
+            w.destroy()
+        self._instrument_vars.clear()
+        self._sel_track = idx
         row.set_selected(True)
-        self._populate_checkboxes(row.song)
+
+    def _on_tab_click(self, tab_row):
+        # Choosing a tab implies its track: the pairing on screen is the whole
+        # point, so the audio it sits under is selected with it.
+        parent = next((r for r in self._rows if tab_row in r.tab_rows), None)
+        if self._sel_tab is tab_row:
+            self._clear_tab_selection()
+            self._rev_label.configure(text="")
+            return
+        self._clear_tab_selection()
+        if parent is not None:
+            idx = self._rows.index(parent)
+            if self._sel_track is not None and self._sel_track != idx:
+                self._rows[self._sel_track].set_selected(False)
+            self._sel_track = idx
+            parent.set_selected(True)
+        self._sel_tab = tab_row
+        tab_row.set_selected(True)
+        self._populate_checkboxes(tab_row.tab)
         self._rev_label.configure(text="Loading revision…", text_color=MUTED)
-        threading.Thread(target=self._load_rev, args=(row.song["songId"],),
+        threading.Thread(target=self._load_rev, args=(tab_row.tab["songId"],),
                          daemon=True).start()
 
     def _load_rev(self, song_id: int):
         try:
             revs = sapi.get_revisions(song_id)
             if revs:
-                rev = max(revs, key=lambda r: r["createdAt"])
-                self.after(0, self._rev_loaded, rev, None)
+                self.after(0, self._rev_loaded, max(revs, key=lambda r: r["createdAt"]), None)
             else:
                 self.after(0, self._rev_loaded, None, "No revisions found")
         except Exception as e:
             self.after(0, self._rev_loaded, None, str(e))
 
-    def _rev_loaded(self, rev: dict | None, error: str | None):
+    def _rev_loaded(self, rev, error):
         if error:
             self._rev_label.configure(text=f"Error: {error}", text_color="#f06060")
-        else:
-            self._selected_rev = rev
-            date   = rev["createdAt"][:10]
-            author = rev.get("author", {}).get("name", "?")
-            self._rev_label.configure(
-                text=f"Latest revision: {date} by {author} — ready to download",
-                text_color=MUTED)
+            return
+        self._selected_rev = rev
+        author = rev.get("author", {}).get("name", "?")
+        self._rev_label.configure(
+            text=f"Latest revision: {rev['createdAt'][:10]} by {author} — ready to download",
+            text_color=MUTED)
+
+    # ── interfaces the pipeline asks for ──────────────────────────────────────
 
     @property
-    def selected_song(self) -> dict | None:
-        return self._songs[self._selected_idx] if self._selected_idx is not None else None
+    def selected_track(self):
+        return self._tracks[self._sel_track] if self._sel_track is not None else None
 
     @property
-    def selected_rev(self) -> dict | None:
+    def selected_song(self):
+        return self._sel_tab.tab if self._sel_tab is not None else None
+
+    @property
+    def selected_rev(self):
         return self._selected_rev
+
+    def selected_stems(self) -> list:
+        return [k for k, v in self._stem_vars.items()
+                if v.get() and k not in ("full", "drums")]
+
+    def combined_stems(self) -> list:
+        return [k for k, v in self._combo_vars.items() if v.get()]
+
+    @property
+    def download_original(self) -> bool:
+        return self._stem_vars["full"].get()
+
+    @property
+    def download_od(self) -> bool:
+        return self._stem_vars["drums"].get()
+
+    @property
+    def download_nd(self) -> bool:
+        return False
 
     @property
     def want_midi(self) -> bool:
@@ -1094,11 +1086,10 @@ class SongsterrPanel(ctk.CTkFrame):
         return bool(getattr(self.app, "want_gp", True))
 
     @property
-    def selected_categories(self) -> set[str] | None:
-        """Checked instrument categories, or None if no checkboxes are shown (means all)."""
+    def selected_categories(self):
         if not self._instrument_vars:
             return None
-        return {cat for cat, var in self._instrument_vars.items() if var.get()}
+        return {c for c, v in self._instrument_vars.items() if v.get()}
 
 
 # ── Main App ──────────────────────────────────────────────────────────────────
@@ -1191,12 +1182,11 @@ class App(ctk.CTk):
         panes.columnconfigure(2, weight=1)
         panes.rowconfigure(0, weight=1)
 
-        self.am_panel = StreamingPanel(panes, self)
-        self.am_panel.grid(row=0, column=0, sticky="nsew")
-        ctk.CTkFrame(panes, width=1, fg_color=BORDER,
-                     corner_radius=0).grid(row=0, column=1, sticky="ns")
-        self.ss_panel = SongsterrPanel(panes, self)
-        self.ss_panel.grid(row=0, column=2, sticky="nsew")
+        # One browser serving both roles, so the pipeline can keep asking for
+        # a streaming track and a score without knowing they share a widget.
+        self.browser = BrowserPanel(panes, self)
+        self.browser.grid(row=0, column=0, columnspan=3, sticky="nsew")
+        self.am_panel = self.ss_panel = self.browser
 
         ctk.CTkFrame(self, height=1, fg_color=BORDER, corner_radius=0).pack(fill="x")
 
@@ -1404,7 +1394,6 @@ class App(ctk.CTk):
     def _search_thread(self, q: str):
         am_results, ss_results = [], []
         am_err = ss_err = None
-
         prov = self.provider()
 
         def fetch_am():
@@ -1422,7 +1411,9 @@ class App(ctk.CTk):
         def fetch_ss():
             nonlocal ss_results, ss_err
             try:
-                ss_results = sapi.search(q, size=20)
+                # A wider pool than the old side-by-side list needed: it is now
+                # shared out across every track rather than shown as-is.
+                ss_results = sapi.search(q, size=40)
             except Exception as e:
                 ss_err = str(e)
 
@@ -1434,19 +1425,50 @@ class App(ctk.CTk):
 
     def _search_done(self, am, ss, am_err, ss_err):
         self._search_btn.configure(state="normal", text="Search")
-        self.am_panel.populate(am)
-        self.ss_panel.populate(ss)
+        self.browser.populate(am)
         if am_err or ss_err:
             parts = []
             if am_err: parts.append(f"{self.provider().name}: {am_err}")
             if ss_err: parts.append(f"Songsterr: {ss_err}")
             self._status.configure(text="  |  ".join(parts), text_color="#f06060")
-        else:
-            self._status.configure(
-                text=f"{len(am)} {self.provider().name}  ·  {len(ss)} Songsterr results",
-                text_color=MUTED)
+        if not am:
+            if not am_err:
+                self._status.configure(text="No results.", text_color=MUTED)
+            return
+        self._status.configure(
+            text=f"{len(am)} {self.provider().name} results — matching tabs…",
+            text_color=MUTED)
+        threading.Thread(target=self._match_thread, args=(am, ss), daemon=True).start()
 
-    # ── Process ───────────────────────────────────────────────────────────────
+    def _match_thread(self, tracks, pool):
+        """Attach Songsterr tabs to each streaming track.
+
+        One broad Songsterr query cannot cover a whole discography, so the pool
+        is shared out first and only the tracks it missed get their own lookup.
+        Results are posted per track as they arrive, so the list fills in rather
+        than waiting on the slowest request.
+        """
+        try:
+            found = match.bucket(tracks, pool, limit=TABS_PER_SONG)
+        except Exception:
+            found = {}
+        for i, tabs in found.items():
+            self.after(0, self.browser.set_tabs_for, i, tabs)
+
+        def publish(i, tabs):
+            self.after(0, self.browser.set_tabs_for, i, tabs)
+
+        try:
+            found = match.fill(tracks, found, sapi.search,
+                               limit=TABS_PER_SONG, on_found=publish)
+        except Exception:
+            pass
+        for i in range(len(tracks)):
+            if i not in found:
+                self.after(0, self.browser.set_tabs_for, i, [])
+        n = sum(1 for i in range(len(tracks)) if found.get(i))
+        self.after(0, lambda: self._status.configure(
+            text=f"{n} of {len(tracks)} results have tabs", text_color=MUTED))
 
     def _do_process(self):
         am_track  = self.am_panel.selected_track

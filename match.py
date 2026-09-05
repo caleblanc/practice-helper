@@ -81,7 +81,8 @@ def bucket(tracks: list[dict], tabs: list[dict], limit: int = 3) -> dict[int, li
 
 
 def fill(tracks: list[dict], found: dict[int, list[dict]], search_fn,
-         limit: int = 3, workers: int = 6, budget: int = 20) -> dict[int, list[dict]]:
+         limit: int = 3, workers: int = 6, budget: int = 20,
+         on_found=None) -> dict[int, list[dict]]:
     """Look up tabs individually for tracks the shared pool missed.
 
     One broad search cannot cover a whole discography, so anything still
@@ -105,8 +106,13 @@ def fill(tracks: list[dict], found: dict[int, list[dict]], search_fn,
             hits = sorted([(score(tr, tb), tb) for tb in res if score(tr, tb) > 0],
                           key=lambda x: -x[0])
             if hits:
+                tabs = [tb for _s, tb in hits[:limit]]
                 with lock:
-                    found[i] = [tb for _s, tb in hits[:limit]]
+                    found[i] = tabs
+                if on_found:
+                    # Publish as each lookup lands so the list fills in rather
+                    # than appearing all at once at the end.
+                    on_found(i, tabs)
 
     threads = [threading.Thread(target=work, args=(i,), daemon=True) for i in todo]
     for t in threads:
