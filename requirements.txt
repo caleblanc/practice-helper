@@ -8,8 +8,12 @@ Pillow>=10.0.0
 mido>=1.3.0
 PyGuitarPro>=0.6.0
 
-# Stem separation and audio alignment
-demucs>=4.0.0
+# Stem separation and audio alignment.
+# torch is demucs's own dependency; numpy and soundfile are used directly by
+# the aligner and the stem mixer, so they are pinned here rather than relied on
+# as transitive. torchaudio is deliberately NOT required: demucs 4.1 does not
+# need it, and demucs_runner only patches it when it happens to be present.
+demucs>=4.1.0
 numpy>=1.24.0
 soundfile>=0.12.0
 

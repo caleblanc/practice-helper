@@ -777,16 +777,18 @@ class BrowserPanel(ctk.CTkFrame):
         top = ctk.CTkFrame(self, fg_color=SURFACE2, height=44, corner_radius=0)
         top.pack(fill="x")
         top.pack_propagate(False)
-        self._title_lbl = ctk.CTkLabel(top, text=prov.name, text_color=prov.accent,
-                                       font=ctk.CTkFont(size=14, weight="bold"))
-        self._title_lbl.pack(side="left", padx=(16, 6))
+        # The dropdown *is* the title: showing the service name twice, once as a
+        # label and again inside the selector next to it, was pure duplication.
         self._prov_menu = ctk.CTkOptionMenu(
-            top, width=120, height=26, font=("", 11),
+            top, width=168, height=30,
+            font=ctk.CTkFont(size=14, weight="bold"),
             values=[providers.get(x).name for x in providers.ORDER],
-            fg_color=SURFACE, button_color=prov.accent, button_hover_color=prov.dim,
+            fg_color=SURFACE, text_color=prov.accent,
+            button_color=prov.accent, button_hover_color=prov.dim,
             command=self._on_provider_pick)
         self._prov_menu.set(prov.name)
-        self._prov_menu.pack(side="left")
+        self._prov_menu.pack(side="left", padx=(14, 6))
+        self._title_lbl = self._prov_menu       # retheme() still has one thing to update
         self._fmt_lbl = ctk.CTkLabel(top, text=self._header_text(), text_color=BLUE,
                                      font=ctk.CTkFont(size=13, weight="bold"))
         self._fmt_lbl.pack(side="right", padx=16)
@@ -847,8 +849,8 @@ class BrowserPanel(ctk.CTkFrame):
 
     def retheme(self):
         prov = self.app.provider()
-        self._title_lbl.configure(text=prov.name, text_color=prov.accent)
-        self._prov_menu.configure(button_color=prov.accent, button_hover_color=prov.dim)
+        self._prov_menu.configure(text_color=prov.accent, button_color=prov.accent,
+                                  button_hover_color=prov.dim)
         self._prov_menu.set(prov.name)
         self._rule.configure(fg_color=prov.accent)
         self._check_frame.set_accent(prov.accent, prov.tint)
@@ -1203,7 +1205,8 @@ class App(ctk.CTk):
                                            command=self._do_process)
         self._process_btn.grid(row=0, column=1)
         self._status = ctk.CTkLabel(bottom, text="Search for a song to get started.",
-                                    text_color=MUTED, anchor="w", font=("", 12))
+                                    text_color=MUTED, anchor="w", justify="left",
+                                    font=("", 12), wraplength=420)
         self._status.grid(row=0, column=0, sticky="w", padx=16)
 
         # Log
