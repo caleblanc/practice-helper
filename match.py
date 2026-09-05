@@ -10,6 +10,7 @@ otherwise indistinguishable.
 
 from __future__ import annotations
 
+import difflib
 import re
 import threading
 
@@ -40,6 +41,39 @@ def norm(text: str, strip_noise: bool = True) -> str:
     return " ".join(t.split())
 
 
+def _tok_eq(x: str, y: str) -> bool:
+    """Are two words the same word, allowing for a typo or a plural?
+
+    Tab titles are typed by hand: "Blindfolds Asides" for "Blindfolds Aside",
+    and exact equality throws the whole match away over one letter. Only words
+    of four characters or more get the benefit -- below that a single letter is
+    most of the word, and "pol" would reach "polaris". The threshold is set so
+    that "aside"/"asides" passes while "bleed"/"bled", two different words,
+    does not.
+    """
+    if x == y:
+        return True
+    if len(x) < 4 or len(y) < 4 or abs(len(x) - len(y)) > 2:
+        return False
+    return difflib.SequenceMatcher(None, x, y).ratio() >= 0.90
+
+
+def _seq_eq(a: list, b: list) -> bool:
+    return len(a) == len(b) and all(_tok_eq(x, y) for x, y in zip(a, b))
+
+
+def _artist_related(a: str, b: str) -> bool:
+    """Might these two names be the same act, misfiled?
+
+    Requires a distinctive word in common -- "Protest The Hero" against
+    "Protest The Protagonist" -- rather than raw similarity, which would call
+    "Polaris" and "Polar" related. Stopwords are already stripped by norm.
+    """
+    at, bt = set(norm(a).split()), set(norm(b).split())
+    shared = {w for w in at & bt if len(w) >= 4}
+    return bool(shared)
+
+
 def _artist_ok(a: str, b: str) -> bool:
     """Do these two artist names refer to the same act?
 
@@ -55,7 +89,8 @@ def _artist_ok(a: str, b: str) -> bool:
     return at == bt or at <= bt or bt <= at
 
 
-UNCERTAIN_PENALTY = 0.45     # title matches, artist does not
+UNCERTAIN_PENALTY = 0.45     # title matches, artist is unrelated
+RELATED_PENALTY   = 0.70     # title matches, artist name is close but not equal
 
 
 def rate(track: dict, tab: dict):
@@ -81,6 +116,13 @@ def rate(track: dict, tab: dict):
     title_score = max(0.3, title_score - 0.04 * extra)
     if artist_ok:
         return title_score, True
+    # Tab uploads get misfiled under names that are close but not the same --
+    # "Blindfolds Aside" is filed under "Protest The Protagonist" rather than
+    # "Protest The Hero". A shared distinctive word is decent evidence, so rank
+    # these above a same-titled tab by a completely unrelated act, while still
+    # leaving the final say to the user.
+    if _artist_related(track.get("artistName", ""), tab.get("artist", "")):
+        return title_score * RELATED_PENALTY, False
     # Only an exact title is a strong enough signal to survive a wrong artist;
     # a partial title plus a wrong artist is just a different song.
     if title_score < 1.0:
@@ -97,13 +139,13 @@ def _title_score(track: dict, tab: dict, allow_short: bool = False) -> float:
     t, s = norm(track.get("trackName", "")).split(), norm(tab.get("title", "")).split()
     if not t or not s:
         return 0.0
-    if t == s:
+    if _seq_eq(t, s):
         return 1.0
 
     # Compare whole words, never raw substrings: "Twist" is not a match for
     # "Twisted Transistor", though one is a prefix of the other as text.
     short, long_ = (t, s) if len(t) <= len(s) else (s, t)
-    if long_[:len(short)] != short:
+    if not _seq_eq(long_[:len(short)], short):
         return 0.0
     # A single-word title is too weak an anchor to extend on its own -- "Blind"
     # would swallow "Blind Faith" -- but when the artist already agrees it is
