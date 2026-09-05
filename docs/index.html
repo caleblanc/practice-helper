@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Practice Helper</title>
+<style>
+/* ── Tokens ── */
+:root {
+  --bg:        #0c0b0a;
+  --surface:   #161412;
+  --surface2:  #1e1c19;
+  --border:    #2e2a26;
+  --text:      #f0ebe5;
+  --muted:     #7d7470;
+  --red:       #e8332a;
+  --red-dim:   #9e1f18;
+  --blue:      #4ca8f0;
+  --green:     #30d158;
+  --code-bg:   #0f0d0b;
+  --rule:      1px solid var(--border);
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg:      #f5f1eb;
+    --surface: #ede8e0;
+    --surface2:#e5dfd6;
+    --border:  #cec8be;
+    --text:    #17140f;
+    --muted:   #8a8480;
+    --red:     #c8251d;
+    --red-dim: #8f1813;
+    --blue:    #2277cc;
+    --green:   #1a8c3d;
+    --code-bg: #161210;
+  }
+}
+:root[data-theme="dark"]  { --bg:#0c0b0a;--surface:#161412;--surface2:#1e1c19;--border:#2e2a26;--text:#f0ebe5;--muted:#7d7470;--red:#e8332a;--red-dim:#9e1f18;--blue:#4ca8f0;--green:#30d158;--code-bg:#0f0d0b; }
+:root[data-theme="light"] { --bg:#f5f1eb;--surface:#ede8e0;--surface2:#e5dfd6;--border:#cec8be;--text:#17140f;--muted:#8a8480;--red:#c8251d;--red-dim:#8f1813;--blue:#2277cc;--green:#1a8c3d;--code-bg:#161210; }
+
+/* ── Reset ── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+
+/* ── Nav ── */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:0 32px;height:56px;background:color-mix(in srgb,var(--bg) 85%,transparent);backdrop-filter:blur(12px);border-bottom:var(--rule)}
+.nav-brand{font-size:14px;font-weight:700;letter-spacing:-0.01em;display:flex;align-items:center;gap:8px}
+.nav-dot{width:8px;height:8px;background:var(--red);border-radius:50%;animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
+.nav-links{display:flex;align-items:center;gap:28px;list-style:none}
+.nav-links a{font-size:13px;color:var(--muted);transition:color .15s}
+.nav-links a:hover{color:var(--text)}
+.nav-actions{display:flex;align-items:center;gap:10px}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 16px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:opacity .15s}
+.btn:hover{opacity:.85}
+.btn-primary{background:var(--red);color:#fff}
+.btn-ghost{background:transparent;color:var(--text);border:var(--rule)}
+.theme-btn{width:32px;height:32px;border-radius:6px;border:var(--rule);background:transparent;cursor:pointer;color:var(--muted);font-size:14px;display:flex;align-items:center;justify-content:center;transition:color .15s}
+.theme-btn:hover{color:var(--text)}
+
+/* ── Hero ── */
+.hero{position:relative;min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:120px 48px 80px;overflow:hidden}
+#rhythm-canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.hero-inner{position:relative;max-width:900px}
+.hero-eyebrow{display:flex;align-items:center;gap:10px;margin-bottom:28px}
+.badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:4px;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;border:var(--rule);color:var(--muted)}
+.badge-new{border-color:color-mix(in srgb,var(--red) 40%,var(--border));color:var(--red);background:color-mix(in srgb,var(--red) 8%,transparent)}
+.hero-title{font-size:clamp(52px,9vw,112px);font-weight:900;letter-spacing:-0.04em;line-height:.92;text-wrap:balance;margin-bottom:32px}
+.hero-title .red{color:var(--red)}
+.hero-sub{font-size:clamp(16px,2vw,22px);color:var(--muted);max-width:540px;line-height:1.5;margin-bottom:44px}
+.hero-ctas{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.btn-lg{padding:12px 24px;font-size:15px;border-radius:8px}
+.hero-meta{margin-top:64px;padding-top:32px;border-top:var(--rule);display:flex;align-items:center;gap:32px;flex-wrap:wrap}
+.meta-item{display:flex;flex-direction:column;gap:2px}
+.meta-label{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.meta-value{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
+
+/* ── Sections ── */
+section{border-top:var(--rule);padding:96px 48px}
+.eyebrow{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--red);font-weight:600;margin-bottom:16px}
+.section-title{font-size:clamp(28px,4vw,46px);font-weight:800;letter-spacing:-0.03em;line-height:1.05;text-wrap:balance;max-width:640px;margin-bottom:56px}
+
+/* ── Feature grid ── */
+.features-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:2px;background:var(--border);border:var(--rule)}
+.feature-card{background:var(--bg);padding:36px;display:flex;flex-direction:column;gap:16px}
+.feature-icon{width:40px;height:40px;display:flex;align-items:center;justify-content:center}
+.feature-icon svg{width:24px;height:24px}
+.feature-title{font-size:17px;font-weight:700;letter-spacing:-0.02em;line-height:1.2}
+.feature-desc{font-size:14px;color:var(--muted);line-height:1.65}
+.feature-tag{display:inline-block;font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--blue);margin-top:auto;padding-top:8px}
+code{font-family:"Menlo","Consolas",monospace;font-size:.875em}
+
+/* ── Steps ── */
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:0;position:relative}
+.steps::before{content:'';position:absolute;top:20px;left:calc(16.666% + 20px);right:calc(16.666% + 20px);height:1px;background:linear-gradient(to right,var(--border),var(--red),var(--border))}
+.step{padding:0 32px 0 0}
+.step-num{width:40px;height:40px;border:2px solid var(--border);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--muted);margin-bottom:20px;background:var(--bg);position:relative;z-index:1}
+.step:first-child .step-num{border-color:var(--red);color:var(--red)}
+.step-title{font-size:17px;font-weight:700;letter-spacing:-0.02em;margin-bottom:8px}
+.step-desc{font-size:14px;color:var(--muted);line-height:1.6}
+
+/* ── Terminal ── */
+.install-grid{display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:start}
+.terminal{background:var(--code-bg);border:var(--rule);border-radius:10px;overflow:hidden}
+.term-header{padding:10px 16px;border-bottom:var(--rule);display:flex;align-items:center;gap:8px}
+.term-dots{display:flex;gap:6px}
+.term-dot{width:10px;height:10px;border-radius:50%}
+.term-dot:nth-child(1){background:#ff5f57}
+.term-dot:nth-child(2){background:#febc2e}
+.term-dot:nth-child(3){background:#28c840}
+.term-platform{font-size:11px;color:var(--muted);margin-left:auto;font-family:"Menlo","Consolas",monospace}
+.term-body{padding:20px 20px 24px;font-family:"Menlo","Consolas","Monaco",monospace;font-size:13px;line-height:1.9;overflow-x:auto}
+.t-c{color:var(--muted)}
+.t-p{color:var(--red);user-select:none}
+.t-cmd{color:var(--text)}
+.t-out{color:var(--green)}
+.notes{display:flex;flex-direction:column;gap:16px}
+.note{padding:20px;border:var(--rule);border-radius:8px;background:var(--surface)}
+.note-title{font-size:13px;font-weight:700;margin-bottom:6px;letter-spacing:-0.01em}
+.note-body{font-size:13px;color:var(--muted);line-height:1.6}
+.note-body code{color:var(--blue);background:color-mix(in srgb,var(--blue) 10%,transparent);padding:1px 5px;border-radius:3px}
+
+/* ── Platform ── */
+.platform-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.plat-card{border:var(--rule);border-radius:10px;overflow:hidden;background:var(--surface)}
+.plat-header{padding:20px 24px;border-bottom:var(--rule);display:flex;align-items:center;justify-content:space-between}
+.plat-name{font-size:16px;font-weight:700;letter-spacing:-0.02em}
+.plat-status{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--green)}
+.plat-reqs{padding:20px 24px;display:flex;flex-direction:column;gap:12px}
+.req{display:flex;align-items:center;justify-content:space-between;font-size:13px}
+.req-name{color:var(--muted)}
+.req-val{font-weight:600;font-size:12px}
+.ok{color:var(--green)}
+.needed{color:var(--blue)}
+
+/* ── Footer ── */
+footer{border-top:var(--rule);padding:40px 48px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px}
+.footer-left{font-size:13px;color:var(--muted)}
+.footer-left strong{color:var(--text)}
+.footer-links{display:flex;gap:24px;list-style:none}
+.footer-links a{font-size:13px;color:var(--muted);transition:color .15s}
+.footer-links a:hover{color:var(--text)}
+
+/* ── Responsive ── */
+@media(max-width:720px){
+  nav{padding:0 20px}
+  .nav-links{display:none}
+  .hero{padding:100px 24px 60px}
+  section{padding:64px 24px}
+  .steps{grid-template-columns:1fr;gap:40px}
+  .steps::before{display:none}
+  .install-grid{grid-template-columns:1fr}
+  .platform-grid{grid-template-columns:1fr}
+  footer{padding:32px 24px}
+}
+:focus-visible{outline:2px solid var(--red);outline-offset:3px;border-radius:4px}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-brand">
+    <div class="nav-dot"></div>
+    Practice Helper
+  </div>
+  <ul class="nav-links">
+    <li><a href="#features">Features</a></li>
+    <li><a href="#install">Install</a></li>
+    <li><a href="#platforms">Platforms</a></li>
+  </ul>
+  <div class="nav-actions">
+    <button class="theme-btn" id="theme-toggle" aria-label="Toggle theme">◐</button>
+    <a href="https://github.com/caleblanc/practice-helper" class="btn btn-ghost">GitHub</a>
+    <a href="#install" class="btn btn-primary">Get started</a>
+  </div>
+</nav>
+
+<section class="hero" style="border-top:none">
+  <canvas id="rhythm-canvas" aria-hidden="true"></canvas>
+  <div class="hero-inner">
+    <div class="hero-eyebrow">
+      <span class="badge">macOS</span>
+      <span class="badge">Windows</span>
+      <span class="badge badge-new">Open source</span>
+    </div>
+    <h1 class="hero-title">
+      Pull stems,<br>tabs, and<br><span class="red">GP files</span><br>for any song.
+    </h1>
+    <p class="hero-sub">Download Apple Music tracks, isolate drum stems with Demucs, and grab full Guitar Pro arrangements from Songsterr — all from one app.</p>
+    <div class="hero-ctas">
+      <a href="#install" class="btn btn-primary btn-lg">Install</a>
+      <a href="https://github.com/caleblanc/practice-helper" class="btn btn-ghost btn-lg">View on GitHub</a>
+    </div>
+    <div class="hero-meta">
+      <div class="meta-item"><span class="meta-label">Requires</span><span class="meta-value">Python 3.11+</span></div>
+      <div class="meta-item"><span class="meta-label">GP export</span><span class="meta-value">Full arrangement</span></div>
+      <div class="meta-item"><span class="meta-label">Feel detection</span><span class="meta-value">Triplet &amp; straight</span></div>
+      <div class="meta-item"><span class="meta-label">Stem model</span><span class="meta-value">htdemucs</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <p class="eyebrow">What it does</p>
+  <h2 class="section-title">Everything a drumming session needs, automated.</h2>
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M9 9h6M9 12h6M9 15h4"/><circle cx="16" cy="15" r="2" fill="var(--red)" stroke="none"/></svg>
+      </div>
+      <div class="feature-title">Songsterr → MIDI &amp; Guitar Pro</div>
+      <div class="feature-desc">Search any song, select a revision, and download the full arrangement as a standard MIDI file or a Guitar Pro 5 file — with every instrument on its own track.</div>
+      <span class="feature-tag">17 tracks · 114 BPM · triplet feel</span>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="1.5"><path d="M12 3v13M8 12l4 4 4-4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+      </div>
+      <div class="feature-title">Apple Music → Stems</div>
+      <div class="feature-desc">Download any Apple Music track and split it with Demucs into a drums-only (OD) and no-drums (ND) WAV — ready to load into your DAW at full resolution.</div>
+      <span class="feature-tag" style="color:var(--blue)">htdemucs · MPS / CUDA / CPU</span>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="1.5"><rect x="3" y="4" width="7" height="7" rx="1"/><rect x="14" y="4" width="7" height="7" rx="1"/><rect x="3" y="15" width="7" height="7" rx="1"/><path d="M14 18.5h7M17.5 15v7"/></svg>
+      </div>
+      <div class="feature-title">Accurate rhythmic feel</div>
+      <div class="feature-desc">Detects triplet-eighth vs. straight-sixteenth feel per track using note positions and inter-note gaps, so the GP5 displays in correct notation — not a grid of 16th rests.</div>
+      <span class="feature-tag" style="color:var(--green)">Position + gap analysis</span>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+      </div>
+      <div class="feature-title">Notation control</div>
+      <div class="feature-desc">Choose whether Guitar Pro files open in Standard notation, TAB only, or both — with a toggle in Settings that persists across sessions.</div>
+      <span class="feature-tag" style="color:var(--muted)">Standard · TAB · Both</span>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="1.5"><rect x="2" y="6" width="9" height="13" rx="1.5"/><rect x="13" y="6" width="9" height="13" rx="1.5"/><path d="M5 10h3M5 13h3M16 10h3M16 13h3"/></svg>
+      </div>
+      <div class="feature-title">Organised output</div>
+      <div class="feature-desc">Every download lands in its own <code style="color:var(--red)">Artist - Title/</code> subfolder. MIDI, GP5, OD stem, and ND stem always travel together.</div>
+      <span class="feature-tag">Zero manual filing</span>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="1.5"><path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/></svg>
+      </div>
+      <div class="feature-title">Mac &amp; Windows</div>
+      <div class="feature-desc">Runs natively on macOS (afconvert + MPS) and Windows (ffmpeg + CUDA or CPU). One codebase, both platforms.</div>
+      <span class="feature-tag" style="color:var(--blue)">customtkinter UI</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <p class="eyebrow">Workflow</p>
+  <h2 class="section-title">Search once. Get everything.</h2>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-title">Search for a song</div>
+      <div class="step-desc">Type any artist or song. Apple Music and Songsterr results appear side-by-side. Select one or both.</div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-title">Pick your outputs</div>
+      <div class="step-desc">Check Drums Only stem, No-Drums stem, MIDI, and/or Guitar Pro. Choose which Songsterr tracks go in the MIDI.</div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-title">Hit Process</div>
+      <div class="step-desc">Downloads run in parallel. Files land in a named folder in your stems directory — ready for Guitar Pro and your DAW.</div>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <p class="eyebrow">Installation</p>
+  <h2 class="section-title">Up in five minutes.</h2>
+  <div class="install-grid">
+    <div>
+      <div class="terminal" style="margin-bottom:20px">
+        <div class="term-header">
+          <div class="term-dots"><div class="term-dot"></div><div class="term-dot"></div><div class="term-dot"></div></div>
+          <span class="term-platform">macOS / Windows</span>
+        </div>
+        <div class="term-body">
+          <div><span class="t-c"># Clone and set up</span></div>
+          <div><span class="t-p">$ </span><span class="t-cmd">git clone https://github.com/caleblanc/practice-helper</span></div>
+          <div><span class="t-p">$ </span><span class="t-cmd">cd practice-helper</span></div>
+          <div><span class="t-p">$ </span><span class="t-cmd">python -m venv .venv</span></div>
+          <div>&nbsp;</div>
+          <div><span class="t-c"># macOS</span></div>
+          <div><span class="t-p">$ </span><span class="t-cmd">source .venv/bin/activate</span></div>
+          <div><span class="t-c"># Windows</span></div>
+          <div><span class="t-p">&gt; </span><span class="t-cmd">.venv\Scripts\activate</span></div>
+          <div>&nbsp;</div>
+          <div><span class="t-p">$ </span><span class="t-cmd">pip install -r requirements.txt</span></div>
+          <div><span class="t-p">$ </span><span class="t-cmd">python app.py</span></div>
+          <div><span class="t-out">✓ Practice Helper</span></div>
+        </div>
+      </div>
+      <div class="terminal">
+        <div class="term-header">
+          <div class="term-dots"><div class="term-dot"></div><div class="term-dot"></div><div class="term-dot"></div></div>
+          <span class="term-platform">Windows — double-click launcher</span>
+        </div>
+        <div class="term-body">
+          <div><span class="t-c"># Or just run launch.bat</span></div>
+          <div><span class="t-p">&gt; </span><span class="t-cmd">launch.bat</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <div class="note"><div class="note-title">Apple Music</div><div class="note-body">Requires an Apple Music subscription and a <code>cookies.txt</code> file exported from your browser. Set the path in Settings on first launch.</div></div>
+      <div class="note"><div class="note-title">Guitar Pro files</div><div class="note-body"><code>.gp5</code> files open in Guitar Pro 5–8. The converter handles multi-track arrangements, feel detection, and correct notation automatically.</div></div>
+      <div class="note"><div class="note-title">Windows: ffmpeg required</div><div class="note-body">Stem extraction needs <code>ffmpeg</code> on your PATH. Download from <code>ffmpeg.org</code> and add the <code>bin/</code> folder to your system PATH.</div></div>
+      <div class="note"><div class="note-title">Output folder</div><div class="note-body">Defaults to <code>~/Music/Practice Helper/Songs/</code> — change it in Settings to any folder you like.</div></div>
+    </div>
+  </div>
+</section>
+
+<section id="platforms">
+  <p class="eyebrow">Platform support</p>
+  <h2 class="section-title">One app, both platforms.</h2>
+  <div class="platform-grid">
+    <div class="plat-card">
+      <div class="plat-header"><span class="plat-name">macOS</span><span class="plat-status">Full support</span></div>
+      <div class="plat-reqs">
+        <div class="req"><span class="req-name">Minimum version</span><span class="req-val ok">macOS 13 Ventura</span></div>
+        <div class="req"><span class="req-name">Audio conversion</span><span class="req-val ok">afconvert (built-in)</span></div>
+        <div class="req"><span class="req-name">GPU acceleration</span><span class="req-val ok">MPS (Apple Silicon)</span></div>
+        <div class="req"><span class="req-name">Launcher</span><span class="req-val ok">launch.command</span></div>
+        <div class="req"><span class="req-name">Apple Music stems</span><span class="req-val ok">Supported</span></div>
+      </div>
+    </div>
+    <div class="plat-card">
+      <div class="plat-header"><span class="plat-name">Windows</span><span class="plat-status">Full support</span></div>
+      <div class="plat-reqs">
+        <div class="req"><span class="req-name">Minimum version</span><span class="req-val ok">Windows 10 / 11</span></div>
+        <div class="req"><span class="req-name">Audio conversion</span><span class="req-val needed">ffmpeg (install separately)</span></div>
+        <div class="req"><span class="req-name">GPU acceleration</span><span class="req-val needed">CUDA (optional) or CPU</span></div>
+        <div class="req"><span class="req-name">Launcher</span><span class="req-val ok">launch.bat</span></div>
+        <div class="req"><span class="req-name">Apple Music stems</span><span class="req-val ok">Supported</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p class="footer-left"><strong>Practice Helper</strong> — open source, MIT licence · <a href="DISCLAIMER.md" style="color:var(--muted)">Legal disclaimer</a></p>
+  <ul class="footer-links">
+    <li><a href="https://github.com/caleblanc/practice-helper">GitHub</a></li>
+    <li><a href="https://github.com/caleblanc/practice-helper/issues">Issues</a></li>
+    <li><a href="https://www.songsterr.com">Songsterr</a></li>
+  </ul>
+</footer>
+
+<script>
+/* ── Theme ── */
+const root = document.documentElement;
+const btn = document.getElementById('theme-toggle');
+let theme = localStorage.getItem('dph-theme') ||
+  (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+root.setAttribute('data-theme', theme);
+btn.addEventListener('click', () => {
+  theme = theme === 'dark' ? 'light' : 'dark';
+  root.setAttribute('data-theme', theme);
+  localStorage.setItem('dph-theme', theme);
+});
+
+/* ── Rhythm canvas ── */
+(function() {
+  const canvas = document.getElementById('rhythm-canvas');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+
+  const rows = [
+    [1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0], // kick
+    [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], // snare
+    [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0], // hihat
+    [0,0,0,0, 0,0,1,0, 0,0,0,0, 0,0,1,0], // open hihat
+    [1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], // crash
+  ];
+  const COLS = 16, NROWS = rows.length;
+  const BPM = 114, STEP_MS = (60000 / BPM) / 4;
+
+  let step = 0, lastBeat = 0;
+
+  function resize() {
+    canvas.width = canvas.offsetWidth * dpr;
+    canvas.height = canvas.offsetHeight * dpr;
+  }
+
+  function isDark() {
+    return root.getAttribute('data-theme') !== 'light';
+  }
+
+  function draw(ts) {
+    if (ts - lastBeat > STEP_MS) { step = (step + 1) % COLS; lastBeat = ts; }
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    const cellW = W / COLS;
+    const dark = isDark();
+    const offsetY = H * 0.22;
+    const rowH = (H * 0.6) / NROWS;
+
+    for (let r = 0; r < NROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const hit = rows[r][c] === 1;
+        const cur = c === step;
+        const x = c * cellW + cellW / 2;
+        const y = offsetY + r * rowH + rowH / 2;
+        const alpha = hit && cur ? (dark ? .55 : .35)
+                    : hit       ? (dark ? .13 : .10)
+                    : cur       ? (dark ? .07 : .05)
+                    :              dark ? .04 : .03;
+        const rad = (hit ? (cur ? 4.5 : 3) : 2) * dpr;
+        const col = dark ? `rgba(240,235,229,${alpha})` : `rgba(23,20,15,${alpha})`;
+
+        if (hit && cur) {
+          const gc = r === 0 ? `rgba(232,51,42,${alpha*.6})`
+                   : r === 2 ? `rgba(76,168,240,${alpha*.6})`
+                   :            `rgba(240,235,229,${alpha*.4})`;
+          ctx.beginPath();
+          ctx.arc(x, y, 9 * dpr, 0, Math.PI * 2);
+          ctx.fillStyle = gc;
+          ctx.fill();
+        }
+        ctx.beginPath();
+        ctx.arc(x, y, rad, 0, Math.PI * 2);
+        ctx.fillStyle = col;
+        ctx.fill();
+      }
+    }
+
+    // playhead
+    const px = step * cellW + cellW / 2;
+    ctx.beginPath();
+    ctx.moveTo(px, 0);
+    ctx.lineTo(px, H);
+    ctx.strokeStyle = dark ? 'rgba(232,51,42,.07)' : 'rgba(200,37,29,.05)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    requestAnimationFrame(draw);
+  }
+
+  window.addEventListener('resize', resize);
+  resize();
+  if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    requestAnimationFrame(draw);
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+# Core
+customtkinter>=5.2.0
+httpx>=0.27.0
+requests>=2.31.0
+Pillow>=10.0.0
+
+# Score conversion
+mido>=1.3.0
+PyGuitarPro>=0.6.0
+
+# Stem separation and audio alignment
+demucs>=4.0.0
+numpy>=1.24.0
+soundfile>=0.12.0
+
+# Optional — only needed for Apple Music downloads.
+# Install separately: pip install gamdl

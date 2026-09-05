@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# App config (contains your personal paths)
+config.json
+
+# Apple Music cookies — never commit
+cookies.txt
+
+# Output files
+*.mid
+*.gp5
+*.gp4
+*.wav
+*.m4a
+
+# macOS
+.DS_Store
+*.command.bak
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# PyInstaller / packaged app
+*.app
+*.spec

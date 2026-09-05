@@ -1,0 +1,207 @@
+<Track id="1">
+<Name><![CDATA[Chino Moreno | Vocals]]></Name>
+<ShortName><![CDATA[fx.synth.]]></ShortName>
+<Color>234 188 124</Color>
+<SystemsDefautLayout>3</SystemsDefautLayout>
+<SystemsLayout></SystemsLayout>
+<PalmMute>0</PalmMute>
+<PlayingStyle>Default</PlayingStyle>
+<IconId>21</IconId>
+<InstrumentSet>
+<Name>Lead Synthesizer</Name>
+<Type>leadSynthesizer</Type>
+<LineCount>5</LineCount>
+<Elements>
+<Element>
+<Name>Pitched</Name>
+<Type>pitched</Type>
+<SoundbankName></SoundbankName>
+<Articulations>
+<Articulation>
+<Name></Name>
+<StaffLine>0</StaffLine>
+<Noteheads>noteheadBlack noteheadHalf noteheadWhole</Noteheads>
+<TechniquePlacement>outside</TechniquePlacement>
+<TechniqueSymbol></TechniqueSymbol>
+<InputMidiNumbers></InputMidiNumbers>
+<OutputRSESound></OutputRSESound>
+<OutputMidiNumber>0</OutputMidiNumber>
+</Articulation>
+</Articulations>
+</Element>
+</Elements>
+</InstrumentSet>
+
+<Transpose>
+<Chromatic>0</Chromatic>
+<Octave>0</Octave>
+</Transpose>
+<RSE>
+<ChannelStrip version="E56">
+<Parameters>0.58 0.61 0.4 0.6 0.32 0.5 0.62 0.09 0.57 1 0.5 0.5 0.795 0.5 0.5 0.5</Parameters>
+</ChannelStrip>
+</RSE>
+<ForcedSound>-1</ForcedSound>
+<Sounds>
+<Sound>
+<Name><![CDATA[FX5 (brightness)]]></Name>
+<Label><![CDATA[FX5 (brightness)]]></Label>
+<Path>Orchestra/Synth/Lead</Path>
+<Role>User</Role>
+<MIDI>
+<LSB>0</LSB>
+<MSB>0</MSB>
+<Program>100</Program>
+</MIDI>
+<RSE>
+<SoundbankPatch>Celesta-Tuned</SoundbankPatch>
+<ElementsSettings>
+</ElementsSettings>
+<Pickups>
+<OverloudPosition>0</OverloudPosition>
+<Volumes>1 1</Volumes>
+<Tones>1 1</Tones>
+</Pickups>
+<EffectChain>
+<Effect id="M08_GraphicEQ10Band">
+<Parameters>0 0 0.70476 0 0 0 0.30303 0.494949 0.494949 0.494949 0.494949 0.494949 0.494949</Parameters>
+</Effect>
+<Effect id="M04_StudioReverbRoomAmbience">
+<Parameters>1 0.30476 0.7238 0.5 0.2</Parameters>
+</Effect>
+<Effect id="M07_DynamicClassicDynamic">
+<Parameters>0.73809 0.5 0.5</Parameters>
+</Effect>
+</EffectChain>
+</RSE>
+</Sound>
+</Sounds>
+<MidiConnection>
+<Port>0</Port>
+<PrimaryChannel>1</PrimaryChannel>
+<SecondaryChannel>1</SecondaryChannel>
+<ForeOneChannelPerString>false</ForeOneChannelPerString>
+</MidiConnection>
+<PlaybackState>Default</PlaybackState>
+<AudioEngineState>RSE</AudioEngineState>
+<Lyrics dispatched="true">
+<Line>
+<Text><![CDATA[]]></Text>
+<Offset>0</Offset>
+</Line>
+<Line>
+<Text><![CDATA[]]></Text>
+<Offset>0</Offset>
+</Line>
+<Line>
+<Text><![CDATA[]]></Text>
+<Offset>0</Offset>
+</Line>
+<Line>
+<Text><![CDATA[]]></Text>
+<Offset>0</Offset>
+</Line>
+<Line>
+<Text><![CDATA[]]></Text>
+<Offset>0</Offset>
+</Line>
+</Lyrics>
+<Staves>
+<Staff>
+<Properties>
+<Property name="CapoFret">
+<Fret>0</Fret>
+</Property>
+<Property name="FretCount">
+<Number>24</Number>
+</Property>
+<Property name="PartialCapoFret">
+<Fret>0</Fret>
+</Property>
+<Property name="PartialCapoStringFlags">
+<Bitset>000000</Bitset>
+</Property>
+<Property name="Tuning">
+<Pitches>40 45 50 55 59 64</Pitches>
+<Flat></Flat>
+<Instrument>Guitar</Instrument>
+<Label><![CDATA[]]></Label>
+<LabelVisible>true</LabelVisible>
+</Property>
+<Property name="ChordCollection">
+<Items/>
+
+</Property>
+<Property name="ChordWorkingSet">
+<Items/>
+
+</Property>
+<Property name="DiagramCollection">
+<Items/>
+
+</Property>
+<Property name="DiagramWorkingSet">
+<Items/>
+
+</Property>
+<Property name="TuningFlat">
+<Enable />
+</Property>
+<Name><![CDATA[Standard]]></Name>
+</Properties>
+</Staff>
+<Staff>
+<Properties>
+<Property name="CapoFret">
+<Fret>0</Fret>
+</Property>
+<Property name="FretCount">
+<Number>24</Number>
+</Property>
+<Property name="PartialCapoFret">
+<Fret>0</Fret>
+</Property>
+<Property name="PartialCapoStringFlags">
+<Bitset>0000</Bitset>
+</Property>
+<Property name="Tuning">
+<Pitches>28 33 38 43</Pitches>
+<Flat></Flat>
+<Instrument>Bass</Instrument>
+<Label><![CDATA[]]></Label>
+<LabelVisible>true</LabelVisible>
+</Property>
+<Property name="ChordCollection">
+<Items/>
+
+</Property>
+<Property name="ChordWorkingSet">
+<Items/>
+
+</Property>
+<Property name="DiagramCollection">
+<Items/>
+
+</Property>
+<Property name="DiagramWorkingSet">
+<Items/>
+
+</Property>
+<Property name="TuningFlat">
+<Enable />
+</Property>
+<Name><![CDATA[Standard]]></Name>
+</Properties>
+</Staff>
+</Staves>
+<Automations>
+<Automation>
+<Type>Sound</Type>
+<Linear>false</Linear>
+<Bar>0</Bar>
+<Position>0</Position>
+<Visible>true</Visible>
+<Value><![CDATA[Orchestra/Synth/Lead;FX5 (brightness);User]]></Value>
+</Automation>
+</Automations>
+</Track>

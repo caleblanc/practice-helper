@@ -1,0 +1,161 @@
+<Track id="2">
+<Name><![CDATA[Maynard James Keenan | Vocals]]></Name>
+<ShortName><![CDATA[syn.chr.]]></ShortName>
+<Color>209 215 137</Color>
+<SystemsDefautLayout>3</SystemsDefautLayout>
+<SystemsLayout></SystemsLayout>
+<PalmMute>0</PalmMute>
+<PlayingStyle>Default</PlayingStyle>
+<IconId>16</IconId>
+<InstrumentSet>
+<Name>Voice</Name>
+<Type>voice</Type>
+<LineCount>5</LineCount>
+<Elements>
+<Element>
+<Name>Pitched</Name>
+<Type>pitched</Type>
+<SoundbankName></SoundbankName>
+<Articulations>
+<Articulation>
+<Name></Name>
+<StaffLine>0</StaffLine>
+<Noteheads>noteheadBlack noteheadHalf noteheadWhole</Noteheads>
+<TechniquePlacement>outside</TechniquePlacement>
+<TechniqueSymbol></TechniqueSymbol>
+<InputMidiNumbers></InputMidiNumbers>
+<OutputRSESound></OutputRSESound>
+<OutputMidiNumber>0</OutputMidiNumber>
+</Articulation>
+</Articulations>
+</Element>
+</Elements>
+</InstrumentSet>
+
+<Transpose>
+<Chromatic>0</Chromatic>
+<Octave>0</Octave>
+</Transpose>
+<RSE>
+<ChannelStrip version="E56">
+<Parameters>0.6 0.61 0.75 0.63 1 0.5 0.64 1 0.6 1 0.5 0.5 0.795 0.5 0.5 0.5</Parameters>
+</ChannelStrip>
+</RSE>
+<ForcedSound>-1</ForcedSound>
+<Sounds>
+<Sound>
+<Name><![CDATA[Synth Voice]]></Name>
+<Label><![CDATA[Synth Voice]]></Label>
+<Path>Orchestra/Other/Singer</Path>
+<Role>User</Role>
+<MIDI>
+<LSB>0</LSB>
+<MSB>0</MSB>
+<Program>54</Program>
+</MIDI>
+<RSE>
+<SoundbankPatch>MetaChoir-Pad</SoundbankPatch>
+<ElementsSettings>
+</ElementsSettings>
+<Pickups>
+<OverloudPosition>0</OverloudPosition>
+<Volumes>1 1</Volumes>
+<Tones>1 1</Tones>
+</Pickups>
+<EffectChain>
+<Effect id="M08_GraphicEQ10Band">
+<Parameters>0 0 0.69044 0.494949 0.494949 0.494949 0.494949 0.494949 0.494949 0.494949 0.585859 0 0.494949</Parameters>
+</Effect>
+<Effect id="E15_ChorusEnsemble">
+<Parameters>0.15714 0.53808 0</Parameters>
+</Effect>
+</EffectChain>
+</RSE>
+</Sound>
+</Sounds>
+<MidiConnection>
+<Port>0</Port>
+<PrimaryChannel>2</PrimaryChannel>
+<SecondaryChannel>2</SecondaryChannel>
+<ForeOneChannelPerString>false</ForeOneChannelPerString>
+</MidiConnection>
+<PlaybackState>Default</PlaybackState>
+<AudioEngineState>RSE</AudioEngineState>
+<Lyrics dispatched="true">
+<Line>
+<Text><![CDATA[]]></Text>
+<Offset>0</Offset>
+</Line>
+<Line>
+<Text><![CDATA[]]></Text>
+<Offset>0</Offset>
+</Line>
+<Line>
+<Text><![CDATA[]]></Text>
+<Offset>0</Offset>
+</Line>
+<Line>
+<Text><![CDATA[]]></Text>
+<Offset>0</Offset>
+</Line>
+<Line>
+<Text><![CDATA[]]></Text>
+<Offset>0</Offset>
+</Line>
+</Lyrics>
+<Staves>
+<Staff>
+<Properties>
+<Property name="CapoFret">
+<Fret>0</Fret>
+</Property>
+<Property name="FretCount">
+<Number>24</Number>
+</Property>
+<Property name="PartialCapoFret">
+<Fret>0</Fret>
+</Property>
+<Property name="PartialCapoStringFlags">
+<Bitset>000000</Bitset>
+</Property>
+<Property name="Tuning">
+<Pitches>40 45 50 55 59 64</Pitches>
+<Flat></Flat>
+<Instrument>Guitar</Instrument>
+<Label><![CDATA[]]></Label>
+<LabelVisible>true</LabelVisible>
+</Property>
+<Property name="ChordCollection">
+<Items/>
+
+</Property>
+<Property name="ChordWorkingSet">
+<Items/>
+
+</Property>
+<Property name="DiagramCollection">
+<Items/>
+
+</Property>
+<Property name="DiagramWorkingSet">
+<Items/>
+
+</Property>
+<Property name="TuningFlat">
+<Enable />
+</Property>
+<Name><![CDATA[Standard]]></Name>
+</Properties>
+</Staff>
+</Staves>
+<Automations>
+<Automation>
+<Type>Sound</Type>
+<Linear>false</Linear>
+<Bar>0</Bar>
+<Position>0</Position>
+<Visible>true</Visible>
+<Value><![CDATA[Orchestra/Other/Singer;Synth Voice;User]]></Value>
+</Automation>
+</Automations>
+</Track>

@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GPIF>
+<GPVersion>8.1.5</GPVersion>
+<GPRevision required="12024" recommended="13000">13008</GPRevision>
+<Encoding>
+<EncodingDescription>GP8</EncodingDescription>
+</Encoding>
+<Score>
+<Title><![CDATA[Deftones - Passenger]]></Title>
+<SubTitle><![CDATA[]]></SubTitle>
+<Artist><![CDATA[]]></Artist>
+<Album><![CDATA[]]></Album>
+<Words><![CDATA[]]></Words>
+<Music><![CDATA[]]></Music>
+<WordsAndMusic><![CDATA[]]></WordsAndMusic>
+<Copyright><![CDATA[]]></Copyright>
+<Tabber><![CDATA[]]></Tabber>
+<Instructions><![CDATA[]]></Instructions>
+<Notices><![CDATA[]]></Notices>
+<FirstPageHeader><![CDATA[<html><head><meta name="qrichtext" content="1" /><style type="text/css">p, li { white-space: pre-wrap; }</style></head><body style=" font-family:'Times New Roman'; font-size:16pt; font-weight:400; font-style:normal;"><p align="center" style=" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px; font-family:'Sans Serif'; font-size:10pt;"><span style=" font-family:'Times New Roman'; font-size:35pt;">%TITLE%</span></p><p align="center" style=" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px; font-family:'Sans Serif'; font-size:10pt;"><span style=" font-family:'Times New Roman'; font-size:16pt;">%SUBTITLE%</span></p><p align="center" style=" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px; font-family:'Sans Serif'; font-size:10pt;"><span style=" font-family:'Times New Roman'; font-size:16pt;">%ARTIST%</span></p><p align="center" style=" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px; font-family:'Sans Serif'; font-size:10pt;"><span style=" font-family:'Times New Roman'; font-size:16pt;">%ALBUM%</span></p><p align="center" style=" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px; font-family:'Sans Serif'; font-size:10pt;"><span style=" font-family:'Times New Roman'; font-size:12pt;">%WORDS&MUSIC%</span></p></body></html>]]></FirstPageHeader>
+<FirstPageFooter><![CDATA[<html><head><meta name="qrichtext" content="1" /><style type="text/css">p, li { white-space: pre-wrap; }</style></head><body style=" font-family:'Lucida Grande'; font-size:13pt; font-weight:400; font-style:normal;"><p align="right" style=" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px; font-family:'Times'; font-size:14pt;">Page %page%/%pages%</p></body></html>]]></FirstPageFooter>
+<PageHeader><![CDATA[]]></PageHeader>
+<PageFooter><![CDATA[<html><head><meta name="qrichtext" content="1" /><style type="text/css">p, li { white-space: pre-wrap; }</style></head><body style=" font-family:'Lucida Grande'; font-size:13pt; font-weight:400; font-style:normal;"><p align="right" style=" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px; font-family:'Times'; font-size:14pt;">Page %page%/%pages%</p></body></html>]]></PageFooter>
+<ScoreSystemsDefaultLayout>3</ScoreSystemsDefaultLayout>
+<ScoreSystemsLayout></ScoreSystemsLayout>
+<ScoreZoomPolicy>FitWidth</ScoreZoomPolicy>
+<ScoreZoom>2.88212</ScoreZoom>
+<MultiVoice>0</MultiVoice>
+</Score>
+<MasterTrack>
+<Tracks>@@TRACKLIST@@</Tracks>
+<Automations>
+<Automation>
+<Type>Tempo</Type>
+<Linear>false</Linear>
+<Bar>0</Bar>
+<Position>0</Position>
+<Visible>true</Visible>
+<Value>128 2</Value>
+</Automation>
+<Automation>
+<Type>Tempo</Type>
+<Linear>false</Linear>
+<Bar>32</Bar>
+<Position>0</Position>
+<Visible>true</Visible>
+<Value>124 2</Value>
+</Automation>
+<Automation>
+<Type>Tempo</Type>
+<Linear>false</Linear>
+<Bar>48</Bar>
+<Position>0</Position>
+<Visible>true</Visible>
+<Value>118 2</Value>
+</Automation>
+<Automation>
+<Type>Tempo</Type>
+<Linear>false</Linear>
+<Bar>60</Bar>
+<Position>0</Position>
+<Visible>true</Visible>
+<Value>124 2</Value>
+</Automation>
+<Automation>
+<Type>Tempo</Type>
+<Linear>false</Linear>
+<Bar>80</Bar>
+<Position>0</Position>
+<Visible>true</Visible>
+<Value>118 2</Value>
+</Automation>
+<Automation>
+<Type>Tempo</Type>
+<Linear>false</Linear>
+<Bar>96</Bar>
+<Position>0</Position>
+<Visible>true</Visible>
+<Value>124 2</Value>
+</Automation>
+<Automation>
+<Type>Tempo</Type>
+<Linear>false</Linear>
+<Bar>116</Bar>
+<Position>0</Position>
+<Visible>true</Visible>
+<Value>128 2</Value>
+</Automation>
+<Automation>
+<Type>Tempo</Type>
+<Linear>false</Linear>
+<Bar>128</Bar>
+<Position>0</Position>
+<Visible>true</Visible>
+<Value>118 2</Value>
+</Automation>
+<Automation>
+<Type>Tempo</Type>
+<Linear>false</Linear>
+<Bar>160</Bar>
+<Position>0</Position>
+<Visible>true</Visible>
+<Value>124 2</Value>
+</Automation>
+</Automations>
+<RSE>
+<Master>
+<Effect id="M06_DynamicAnalogDynamic">
+<ByPass />
+<Parameters>0 0 0.8 0 0.4 0.6 0.5 0.5</Parameters>
+</Effect>
+<Effect id="M03_StudioReverbRoomStudioA">
+<ByPass />
+<Parameters>1 0.6 0.4 0.5 0.2</Parameters>
+</Effect>
+<Effect id="M08_GraphicEQ10Band">
+<ByPass />
+<Parameters>0 0 0.5 0.5 0.5 0.5 0.5 0.5 0.5 0.5 0.5 0.5 0.5</Parameters>
+</Effect>
+<Effect id="">
+<Parameters>0.76 0.5</Parameters>
+</Effect>
+</Master>
+</RSE>
+</MasterTrack>
+<Tracks>
+@@TRACKS@@
+</Tracks>
+@@MUSIC@@
+<ScoreViews>
+<ScoreView id="1"/>
+</ScoreViews>
+</GPIF>

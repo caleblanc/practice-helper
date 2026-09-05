@@ -1,0 +1,21 @@
+{
+  "provider": "apple",
+  "creds": {
+    "apple_cookies": "",
+    "spotify_client_id": "",
+    "spotify_client_secret": "",
+    "tidal_client_id": "",
+    "tidal_client_secret": "",
+    "tidal_country": "US",
+    "local_root": ""
+  },
+  "download_cmds": {},
+  "tools_path": "",
+  "output_path": "",
+  "stems_path": "",
+  "notation_mode": "standard",
+  "demucs_model": "htdemucs",
+  "want_midi": false,
+  "want_gp": true,
+  "gp_with_audio": false
+}

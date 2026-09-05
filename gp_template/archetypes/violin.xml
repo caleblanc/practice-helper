@@ -1,0 +1,161 @@
+<Track id="0">
+<Name><![CDATA[Chino & Maynard | Vocals]]></Name>
+<ShortName><![CDATA[vln.]]></ShortName>
+<Color>209 215 137</Color>
+<SystemsDefautLayout>3</SystemsDefautLayout>
+<SystemsLayout>9 9 9 9 6 6 6 6 6 5 6 7 6 6 6 5 5 4 8 9 9 8 7 8 9 9 2</SystemsLayout>
+<PalmMute>0</PalmMute>
+<PlayingStyle>Default</PlayingStyle>
+<IconId>11</IconId>
+<InstrumentSet>
+<Name>Violin</Name>
+<Type>violin</Type>
+<LineCount>5</LineCount>
+<Elements>
+<Element>
+<Name>Pitched</Name>
+<Type>pitched</Type>
+<SoundbankName></SoundbankName>
+<Articulations>
+<Articulation>
+<Name></Name>
+<StaffLine>0</StaffLine>
+<Noteheads>noteheadBlack noteheadHalf noteheadWhole</Noteheads>
+<TechniquePlacement>outside</TechniquePlacement>
+<TechniqueSymbol></TechniqueSymbol>
+<InputMidiNumbers></InputMidiNumbers>
+<OutputRSESound></OutputRSESound>
+<OutputMidiNumber>0</OutputMidiNumber>
+</Articulation>
+</Articulations>
+</Element>
+</Elements>
+</InstrumentSet>
+
+<Transpose>
+<Chromatic>0</Chromatic>
+<Octave>0</Octave>
+</Transpose>
+<RSE>
+<ChannelStrip version="E56">
+<Parameters>0.6 0.62 0.81 0.62 0.25 0.5 0.62 0.3 0.6 1 0.5 0.5 0.795 0.5 0.5 0.5</Parameters>
+</ChannelStrip>
+</RSE>
+<ForcedSound>-1</ForcedSound>
+<Sounds>
+<Sound>
+<Name><![CDATA[Violin]]></Name>
+<Label><![CDATA[Violin]]></Label>
+<Path>Orchestra/Strings/Violin</Path>
+<Role>User</Role>
+<MIDI>
+<LSB>0</LSB>
+<MSB>0</MSB>
+<Program>40</Program>
+</MIDI>
+<RSE>
+<SoundbankPatch>Violin-Solo</SoundbankPatch>
+<ElementsSettings>
+</ElementsSettings>
+<Pickups>
+<OverloudPosition>0</OverloudPosition>
+<Volumes>1 1</Volumes>
+<Tones>1 1</Tones>
+</Pickups>
+<EffectChain>
+<Effect id="M08_GraphicEQ10Band">
+<Parameters>1 1 0.96188 0.494949 0.494949 0.494949 0.494949 0.494949 0.363636 0.494949 0.444444 0.808081 0.606061</Parameters>
+</Effect>
+<Effect id="M04_StudioReverbRoomAmbience">
+<Parameters>1 0.30476 0.4 0.5 0.2</Parameters>
+</Effect>
+</EffectChain>
+</RSE>
+</Sound>
+</Sounds>
+<MidiConnection>
+<Port>0</Port>
+<PrimaryChannel>0</PrimaryChannel>
+<SecondaryChannel>0</SecondaryChannel>
+<ForeOneChannelPerString>false</ForeOneChannelPerString>
+</MidiConnection>
+<PlaybackState>Default</PlaybackState>
+<AudioEngineState>RSE</AudioEngineState>
+<Lyrics dispatched="true">
+<Line>
+<Text><![CDATA[]]></Text>
+<Offset>0</Offset>
+</Line>
+<Line>
+<Text><![CDATA[]]></Text>
+<Offset>0</Offset>
+</Line>
+<Line>
+<Text><![CDATA[]]></Text>
+<Offset>0</Offset>
+</Line>
+<Line>
+<Text><![CDATA[]]></Text>
+<Offset>0</Offset>
+</Line>
+<Line>
+<Text><![CDATA[]]></Text>
+<Offset>0</Offset>
+</Line>
+</Lyrics>
+<Staves>
+<Staff>
+<Properties>
+<Property name="CapoFret">
+<Fret>0</Fret>
+</Property>
+<Property name="FretCount">
+<Number>24</Number>
+</Property>
+<Property name="PartialCapoFret">
+<Fret>0</Fret>
+</Property>
+<Property name="PartialCapoStringFlags">
+<Bitset>0000</Bitset>
+</Property>
+<Property name="Tuning">
+<Pitches>55 62 69 76</Pitches>
+<Flat></Flat>
+<Instrument>Violin</Instrument>
+<Label><![CDATA[]]></Label>
+<LabelVisible>true</LabelVisible>
+</Property>
+<Property name="ChordCollection">
+<Items/>
+
+</Property>
+<Property name="ChordWorkingSet">
+<Items/>
+
+</Property>
+<Property name="DiagramCollection">
+<Items/>
+
+</Property>
+<Property name="DiagramWorkingSet">
+<Items/>
+
+</Property>
+<Property name="TuningFlat">
+<Enable />
+</Property>
+<Name><![CDATA[Standard]]></Name>
+</Properties>
+</Staff>
+</Staves>
+<Automations>
+<Automation>
+<Type>Sound</Type>
+<Linear>false</Linear>
+<Bar>0</Bar>
+<Position>0</Position>
+<Visible>true</Visible>
+<Value><![CDATA[Orchestra/Strings/Violin;Violin;User]]></Value>
+</Automation>
+</Automations>
+</Track>
