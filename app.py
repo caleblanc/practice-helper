@@ -462,6 +462,8 @@ class SettingsDialog(ctk.CTkToplevel):
         if hasattr(self.app, "_retheme"):
             self.app._retheme()
         self.destroy()
+        # Now that a service is chosen, offer to install whatever it needs.
+        self.app.after(250, self.app.offer_downloader_install)
 
 
 GLASS   = "#101013"      # SURFACE blended toward BG - fakes translucency
@@ -1264,12 +1266,123 @@ class App(ctk.CTk):
         self.persist()
         self.am_panel.retheme()
         self._retheme()
+        self.after(250, self.offer_downloader_install)
 
     def _retheme(self):
         """Re-colour the shared chrome for the active service."""
         prov = self.provider()
         for btn in (self._search_btn, self._process_btn):
             btn.configure(fg_color=prov.accent, hover_color=prov.dim)
+
+    # ── downloader tooling ────────────────────────────────────────────────────
+
+    # Which pip package supplies which command. Only tools the app actually
+    # references are listed; anything else the user configures is their own.
+    TOOL_PACKAGES = {"gamdl": "gamdl"}
+
+    def downloader_tool(self, prov=None):
+        """The executable this provider's download command needs, if any."""
+        prov = prov or self.provider()
+        template = (self.download_cmds.get(prov.id) or prov.download_cmd or "").strip()
+        if not template:
+            return None
+        try:
+            return Path(shlex.split(template)[0]).stem
+        except Exception:
+            return None
+
+    def missing_downloader(self, prov=None):
+        """Name of the required tool if it is not installed, else None."""
+        tool = self.downloader_tool(prov)
+        if not tool or find_tool(tool, self.tools_path):
+            return None
+        return tool
+
+    def offer_downloader_install(self, prov=None, on_done=None):
+        """Ask permission, then install the provider's downloader.
+
+        Done here rather than in the installer because which tool is needed
+        depends on the service, and the service is chosen in the app.
+        """
+        prov = prov or self.provider()
+        tool = self.missing_downloader(prov)
+        if not tool:
+            if on_done:
+                on_done(True)
+            return
+        # Asked once per tool per session; saying no should not mean being
+        # asked again on every settings save.
+        declined = getattr(self, "_declined_tools", None)
+        if declined is None:
+            declined = self._declined_tools = set()
+        if tool in declined:
+            if on_done:
+                on_done(False)
+            return
+        package = self.TOOL_PACKAGES.get(tool)
+
+        dlg = ctk.CTkToplevel(self)
+        dlg.title("Install downloader")
+        dlg.geometry("470x260")
+        dlg.resizable(False, False)
+        dlg.grab_set()
+        ctk.CTkLabel(dlg, text=f"{prov.name} needs {tool}",
+                     font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(24, 8))
+        if package:
+            body = (f"Downloading audio from {prov.name} uses {tool}, which is not "
+                    f"installed yet.\n\nInstall it now with pip, into this app's own "
+                    f"environment? Nothing else on your system is changed.")
+        else:
+            body = (f"Your download command for {prov.name} needs \u201c{tool}\u201d, "
+                    f"which was not found on your PATH. Install it yourself, or "
+                    f"change the command in Settings.")
+        ctk.CTkLabel(dlg, text=body, wraplength=400, justify="left",
+                     text_color=MUTED, font=("", 12)).pack(padx=30, pady=(0, 10), fill="x")
+        status = ctk.CTkLabel(dlg, text="", text_color=MUTED, font=("", 11))
+        status.pack(pady=(0, 6))
+        row = ctk.CTkFrame(dlg, fg_color="transparent")
+        row.pack(pady=4)
+
+        def run():
+            status.configure(text=f"Installing {package}\u2026", text_color=BLUE)
+            for b in row.winfo_children():
+                b.configure(state="disabled")
+
+            def work():
+                ok, detail = self._pip_install(package)
+                def finish():
+                    if ok:
+                        status.configure(text=f"{tool} installed.", text_color=GREEN)
+                        dlg.after(900, dlg.destroy)
+                    else:
+                        status.configure(text=detail[:90], text_color="#f06060")
+                        for b in row.winfo_children():
+                            b.configure(state="normal")
+                    if on_done:
+                        on_done(ok)
+                self.after(0, finish)
+            threading.Thread(target=work, daemon=True).start()
+
+        if package:
+            ctk.CTkButton(row, text="Install", width=130, height=34,
+                          fg_color=prov.accent, hover_color=prov.dim,
+                          command=run).pack(side="left", padx=6)
+        ctk.CTkButton(row, text="Not now", width=110, height=34,
+                      fg_color=SURFACE2, hover_color=BORDER,
+                      command=lambda: (declined.add(tool), dlg.destroy(),
+                                       on_done(False) if on_done else None)
+                      ).pack(side="left", padx=6)
+
+    def _pip_install(self, package: str):
+        """pip install into whichever interpreter is running the app."""
+        try:
+            r = subprocess.run([sys.executable, "-m", "pip", "install", "-q", package],
+                               capture_output=True, text=True, timeout=900)
+            if r.returncode == 0:
+                return True, ""
+            return False, (r.stderr or r.stdout or "pip failed").strip().splitlines()[-1]
+        except Exception as e:
+            return False, str(e)
 
     def _song_dir(self, label: str) -> Path:
         return Path(self.stems_path) / label

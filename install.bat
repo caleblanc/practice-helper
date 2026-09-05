@@ -38,7 +38,6 @@ if errorlevel 1 goto :env_failed
 call :install_deps
 if errorlevel 1 goto :deps_failed
 
-call :optional_extras
 call :check_ffmpeg
 call :make_shortcuts
 
@@ -111,16 +110,76 @@ if errorlevel 1 exit /b 1
 echo  [OK] Dependencies installed
 exit /b 0
 
-:optional_extras
+:check_ffmpeg
+call :make_shortcuts
+
 echo.
-set /p "GAMDL=Install gamdl for Apple Music downloads? [y/N] "
-if /i not "!GAMDL!"=="y" goto :skip_gamdl
-".venv\Scripts\python.exe" -m pip install -q gamdl
-if errorlevel 1 echo  [!] gamdl failed to install - you can add it later
-if not errorlevel 1 echo  [OK] gamdl installed
+echo  Done.
+echo  Launch "%APPNAME%" from your Desktop or Start Menu.
+echo  On first launch it will offer to set up a streaming service.
+echo.
+set /p "OPENIT=Open it now? [Y/n] "
+if /i not "!OPENIT!"=="n" start "" "!PYW!" "%APPSRC%\app.py"
+echo.
+pause
 exit /b 0
-:skip_gamdl
-echo  Skipped. Other services still work, and you can add it later.
+
+
+REM ============================ subroutines ==================================
+
+:find_python
+set "PY="
+call :try_python "py -3"
+call :try_python "python"
+call :try_python "python3"
+if not defined PY exit /b 1
+for /f "delims=" %%V in ('%PY% --version 2^>^&1') do echo  [OK] Using %%V
+exit /b 0
+
+:try_python
+if defined PY exit /b 0
+%~1 -c "import sys; sys.exit(0 if sys.version_info >= (3,11) else 1)" >nul 2>&1
+if not errorlevel 1 set "PY=%~1"
+exit /b 0
+
+:fetch_source
+echo.
+echo  Downloading Practice Helper...
+set "SRC=%LOCALAPPDATA%\Practice Helper"
+where git >nul 2>&1
+if not errorlevel 1 goto :fetch_git
+powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr '%REPO%/archive/refs/heads/main.zip' -OutFile $env:TEMP\ph.zip; Expand-Archive $env:TEMP\ph.zip $env:TEMP\phstage -Force; $i=(gci $env:TEMP\phstage -Directory)[0].FullName; if(Test-Path '%SRC%'){ri '%SRC%' -Recurse -Force}; mi $i '%SRC%'"
+if errorlevel 1 exit /b 1
+goto :fetch_done
+
+:fetch_git
+if exist "%SRC%" rmdir /s /q "%SRC%"
+git clone --depth 1 -q "%REPO%" "%SRC%"
+if errorlevel 1 exit /b 1
+
+:fetch_done
+cd /d "%SRC%"
+echo  [OK] Downloaded to %SRC%
+exit /b 0
+
+:make_env
+echo.
+echo  Setting up Python environment
+echo  (this installs PyTorch and can take several minutes the first time)
+if exist ".venv\Scripts\python.exe" goto :env_ok
+%PY% -m venv .venv
+if errorlevel 1 exit /b 1
+:env_ok
+echo  [OK] Environment ready
+exit /b 0
+
+:install_deps
+echo.
+echo  Installing dependencies...
+".venv\Scripts\python.exe" -m pip install --upgrade pip -q
+".venv\Scripts\python.exe" -m pip install -r requirements.txt
+if errorlevel 1 exit /b 1
+echo  [OK] Dependencies installed
 exit /b 0
 
 :check_ffmpeg

@@ -98,13 +98,9 @@ fi
 ok "Dependencies installed"
 
 # ── 4. Optional extra ─────────────────────────────────────────────────────────
-printf '\n'
-read -r -p "Install gamdl for Apple Music downloads? [y/N] " reply
-case "$reply" in
-    [Yy]*) ./.venv/bin/python -m pip install -q gamdl && ok "gamdl installed" \
-               || err "gamdl failed to install — you can add it later." ;;
-    *)     info "Skipped. Other services still work, and you can add it later." ;;
-esac
+# Downloader tools are no longer installed here. Which one you need depends on
+# the streaming service you pick, and you pick that on first launch -- so the
+# app asks for consent and installs it then, into this same environment.
 
 # ffmpeg is optional on macOS (afconvert covers conversion) but demucs is
 # happier with it, so mention it rather than silently proceeding.
