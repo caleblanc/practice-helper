@@ -757,7 +757,7 @@ class TrackRow(ctk.CTkFrame):
         self.tabs = list(tabs or [])
         if not self.tabs:
             self.auto_only = False
-            ctk.CTkLabel(self._tabs_host, text="   no tab found", text_color=MUTED,
+            ctk.CTkLabel(self._tabs_host, text="   no tab found", text_color="#5a5a5f",
                          anchor="w", font=("", 10)).pack(fill="x", padx=40, pady=(0, 2))
             return
 
@@ -766,8 +766,11 @@ class TrackRow(ctk.CTkFrame):
         # is just the answer, so state it and select it with the song.
         self.auto_only = len(self.tabs) == 1 and self.tabs[0].get("_certain", False)
         if self.auto_only:
+            # Must not look like the "no tab found" line. Hiding the chooser is
+            # meant to remove a pointless choice, not to make a hit and a miss
+            # render identically in muted grey.
             self._auto_lbl = ctk.CTkLabel(
-                self._tabs_host, anchor="w", font=("", 10), text_color=MUTED,
+                self._tabs_host, anchor="w", font=("", 11), text_color=BLUE,
                 text="   ↳ %s" % self.tabs[0].get("title", ""))
             self._auto_lbl.pack(fill="x", padx=40, pady=(0, 3))
             return
@@ -777,7 +780,10 @@ class TrackRow(ctk.CTkFrame):
     def mark_auto(self, on: bool):
         """Highlight the implicitly-chosen tab while the track is selected."""
         if getattr(self, "auto_only", False) and hasattr(self, "_auto_lbl"):
-            self._auto_lbl.configure(text_color=BLUE if on else MUTED)
+            self._auto_lbl.configure(
+                text_color=BLUE,
+                text=("   ↳ %s%s" % (self.tabs[0].get("title", ""),
+                                     "   ✓ selected" if on else "")))
 
     def set_selected(self, v: bool):
         self._head.configure(fg_color=SURFACE if v else "transparent",
