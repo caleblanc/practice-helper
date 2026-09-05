@@ -406,40 +406,274 @@ def estimate_offset_multi(gp_path, stems, max_lag=30.0, window=180.0):
             "method": "+".join(sorted(curves)) + " (summed)"}
 
 
-def align_and_embed(gp_path, drum_stem, audio_path, out_path, log=print, stems=None):
+def _tempo_regions(gp_path):
+    """Score tempo map as [(bar, bpm)], plus seconds-from-start for each bar."""
+    with zipfile.ZipFile(str(gp_path)) as z:
+        root = ET.fromstring(z.read("Content/score.gpif").decode("utf-8"))
+    tempos = []
+    for a in root.iter("Automation"):
+        if a.findtext("Type") == "Tempo":
+            tempos.append((int(a.findtext("Bar")), float(a.findtext("Value").split()[0])))
+    tempos.sort()
+    if not tempos:
+        return [], []
+
+    def bpm_at(bar):
+        cur = tempos[0][1]
+        for b, v in tempos:
+            if b <= bar:
+                cur = v
+            else:
+                break
+        return cur
+
+    starts, seconds = [], 0.0
+    for mi, mb in enumerate(root.find("MasterBars")):
+        starts.append(seconds)
+        num, den = (int(x) for x in mb.findtext("Time").split("/"))
+        seconds += float(F(num, den)) * (4 * 60.0 / bpm_at(mi))
+    starts.append(seconds)                      # end of the last bar
+    return tempos, starts
+
+
+def fit_tempo_map(gp_path, stems, window=600.0, max_lag=30.0):
+    """Measure the recording's real tempo for each of the score's tempo regions.
+
+    Guitar Pro plays the score at the score's tempos while the backing track
+    plays at its own; a single FramePadding can only make them agree at one
+    point. If the transcriber's tempos are approximate -- and they usually are,
+    115/120/125 being a person's estimate -- the audio drifts away at every
+    tempo change no matter where the start is nudged to.
+
+    So rather than aligning once, each region is aligned on its own and the
+    score's tempo values are corrected to match how long that region actually
+    lasts in the recording. Returns (padding_seconds, [(bar, corrected_bpm)],
+    detail) or (None, [], detail) when there is not enough to measure.
+    """
+    import numpy as np
+    tempos, starts = _tempo_regions(gp_path)
+    detail = {"regions": [], "changed": False}
+    if len(tempos) < 1 or not starts:
+        return None, [], detail
+
+    # Onsets per stem, once.
+    fluxes = {}
+    onsets = {}
+    for name, path in (stems or {}).items():
+        if not path or not os.path.exists(path):
+            continue
+        types = STEM_TRACKS.get(name)
+        if not types:
+            continue
+        o = score_onsets(gp_path, limit=window, types=types)
+        if len(o) < MIN_ONSETS:
+            continue
+        flux, fps = _onset_flux(path, window)
+        if flux is None:
+            continue
+        fluxes[name] = (flux, fps)
+        onsets[name] = o
+    if not fluxes:
+        return None, [], detail
+
+    bounds = [starts[min(b, len(starts) - 1)] for b, _v in tempos] + [starts[-1]]
+
+    def offset_between(t0, t1, centre=None, span=2.0):
+        """Consensus lag using only the notes inside a score-time span.
+
+        A short span carries few onsets and correlates weakly, so once one
+        region has been located the rest are searched only near it. Scanning
+        the full lag range for every region let a 36-second outro lock onto a
+        peak 19 seconds away and report that as tempo drift.
+        """
+        total, fps_used, lags, votes = None, None, None, 0
+        for name, (flux, fps) in fluxes.items():
+            sel = [t for t in onsets[name] if t0 <= t < t1]
+            if len(sel) < MIN_ONSETS:
+                continue
+            curve = _corr_curve(flux, sel, fps, max_lag)
+            if curve is None:
+                continue
+            lags = int(max_lag * fps)
+            fps_used = fps
+            total = curve if total is None else total[:len(curve)] + curve[:len(total)]
+            votes += 1
+        if total is None:
+            return None, 0.0, 0
+        if centre is not None:
+            lo = max(0, int((centre - span) * fps_used) + lags)
+            hi = min(len(total), int((centre + span) * fps_used) + lags + 1)
+            if hi - lo >= 3:
+                sub = total[lo:hi]
+                i = int(np.argmax(sub))
+                med = float(np.median(np.abs(total))) or 1.0
+                return (lo + i - lags) / fps_used, float(sub[i] / med), votes
+        off, conf = _peak(total, fps_used, lags)
+        return off, conf, votes
+
+    offs = []
+    anchor = None
+    for i in range(len(bounds) - 1):
+        # The first measurable region is found from scratch; the rest are looked
+        # for near whatever the previous one settled on.
+        o, c, v = offset_between(bounds[i], bounds[i + 1], centre=anchor)
+        if o is not None:
+            anchor = o
+        offs.append(o)
+        detail["regions"].append({"bar": tempos[i][0], "bpm": tempos[i][1],
+                                  "offset": o, "confidence": c, "stems": v,
+                                  "span": (bounds[i], bounds[i + 1])})
+
+    if all(o is None for o in offs):
+        return None, [], detail
+    # A short opening region -- a two-bar intro, say -- carries too few notes to
+    # correlate. Rather than giving up on the whole song, borrow the first
+    # region that could be measured.
+    first = next(o for o in offs if o is not None)
+    offs = [first if o is None and i < offs.index(first) else o
+            for i, o in enumerate(offs)]
+
+    # The final region has no boundary after it to compare against, so measure
+    # the drift across its own two halves instead. Without this the last tempo
+    # -- often a whole outro -- can never be corrected.
+    tail_end = None
+    lo, hi = bounds[-2], bounds[-1]
+    if hi - lo > 30.0 and offs[-1] is not None:
+        mid = (lo + hi) / 2
+        a, ca, _v1 = offset_between(lo, mid, centre=offs[-1], span=1.0)
+        b, cb, _v2 = offset_between(mid, hi, centre=offs[-1], span=1.0)
+        # Drift across half a region can only be small; anything larger is a bad
+        # correlation, not a tempo error, so leave the tempo alone.
+        if (a is not None and b is not None and min(ca, cb) > 2.0
+                and abs(b - a) < 0.05 * (hi - lo)):
+            offs[-1] = a
+            tail_end = b + (b - a) * 0.5
+            detail["tail_drift"] = b - a
+
+    # Carry the previous measurement through regions too sparse to measure, so
+    # one quiet section does not throw away the ones after it.
+    filled = []
+    last = offs[0]
+    for o in offs:
+        last = o if o is not None else last
+        filled.append(last)
+    filled.append(tail_end if tail_end is not None else filled[-1])
+
+    corrected = []
+    for i, (bar, bpm) in enumerate(tempos):
+        score_len = bounds[i + 1] - bounds[i]
+        audio_len = (bounds[i + 1] + filled[i + 1]) - (bounds[i] + filled[i])
+        if score_len <= 0 or audio_len <= 0:
+            corrected.append((bar, bpm))
+            continue
+        ratio = score_len / audio_len
+        # Refuse absurd corrections: beyond a few percent this is a bad
+        # correlation, not a transcriber's rounding.
+        if not (0.90 <= ratio <= 1.10):
+            corrected.append((bar, bpm))
+            continue
+        corrected.append((bar, round(bpm * ratio, 3)))
+
+    detail["changed"] = any(abs(c - o) > 0.05 for (_b, c), (_b2, o) in zip(corrected, tempos))
+    return filled[0], corrected, detail
+
+
+def write_tempo_map(gp_path, tempos, out_path):
+    """Rewrite the score's tempo automations, keeping everything else."""
+    with zipfile.ZipFile(str(gp_path)) as z:
+        names = z.namelist()
+        blobs = {n: z.read(n) for n in names}
+    x = blobs["Content/score.gpif"].decode("utf-8")
+    autos = "".join(
+        "<Automation><Type>Tempo</Type><Linear>false</Linear><Bar>%d</Bar>"
+        "<Position>0</Position><Visible>true</Visible><Value>%g 2</Value></Automation>"
+        % (bar, bpm) for bar, bpm in tempos)
+    x = re.sub(r"<Automations>.*?</Automations>", "<Automations>" + autos + "</Automations>",
+               x, count=1, flags=re.S)
+    blobs["Content/score.gpif"] = x.encode("utf-8")
+    with zipfile.ZipFile(str(out_path), "w", zipfile.ZIP_DEFLATED) as z:
+        for n in names:
+            z.writestr(n, blobs[n])
+    return out_path
+
+
+def align_and_embed(gp_path, drum_stem, audio_path, out_path, log=print,
+                    stems=None, fit_tempo=True):
     """Align *audio_path* to the score and embed it.
 
-    *stems* maps stem name -> wav path (drums / bass / vocals). The more of
-    them that exist, the more independent votes the offset gets. *drum_stem*
-    stays for callers that only have the one.
+    *stems* maps stem name -> wav path (drums / bass / other / vocals). The more
+    of them exist, the more independent votes the offset gets.
+
+    With *fit_tempo*, the score's tempo markings are also corrected to match how
+    long each section actually lasts in the recording. Guitar Pro plays the
+    score at the score's tempos while the audio plays at its own, so a single
+    padding value can only make them agree at one point: if the transcriber's
+    tempos are approximate the audio drifts away at every tempo change, however
+    carefully the start is nudged.
     """
     pool = dict(stems or {})
     if drum_stem and "drums" not in pool:
         pool["drums"] = drum_stem
 
-    res = estimate_offset_multi(gp_path, pool)
-    offset, conf = res["offset"], res["confidence"]
+    source = gp_path
+    offset = None
+    tmp_gp = None
 
-    for name, v in sorted(res["votes"].items()):
-        if v["offset"] is None:
-            log("  %-6s no vote (%s)" % (name, v["why"] or "unusable"))
-        else:
-            log("  %-6s %+.0f ms from %d notated notes (peak %.1fx)"
-                % (name, v["offset"] * 1000, v["onsets"], v["confidence"]))
+    if fit_tempo:
+        try:
+            pad, corrected, detail = fit_tempo_map(gp_path, pool)
+        except Exception as e:
+            pad, corrected, detail = None, [], {"error": str(e)}
+            log("  ⚠ tempo fitting failed (%s); falling back to a single offset" % e)
+        for r in detail.get("regions", []):
+            if r["offset"] is None:
+                log("  bar %-4d %-7s not measurable" % (r["bar"], "%gbpm" % r["bpm"]))
+            else:
+                log("  bar %-4d %-7s audio is %+.0f ms away (confidence %.1fx, %d stem(s))"
+                    % (r["bar"], "%gbpm" % r["bpm"], r["offset"] * 1000,
+                       r["confidence"], r["stems"]))
+        if pad is not None:
+            offset = pad
+            if detail.get("changed"):
+                changes = [(b, c) for (b, c), (_b, o) in
+                           zip(corrected, _tempo_regions(gp_path)[0]) if abs(c - o) > 0.05]
+                log("  adjusted %d tempo marking(s) to match the recording: %s"
+                    % (len(changes), ", ".join("bar %d → %g bpm" % c for c in changes)))
+                fd, tmp_gp = tempfile.mkstemp(suffix=".gp")
+                os.close(fd)
+                write_tempo_map(gp_path, corrected, tmp_gp)
+                source = tmp_gp
 
     if offset is None:
-        log("  ⚠ could not align from any stem — embedding at 0")
-        offset = 0.0
+        res = estimate_offset_multi(gp_path, pool)
+        offset, conf = res["offset"], res["confidence"]
+        for name, v in sorted(res["votes"].items()):
+            if v["offset"] is None:
+                log("  %-6s no vote (%s)" % (name, v["why"] or "unusable"))
+            else:
+                log("  %-6s %+.0f ms from %d notated notes (peak %.1fx)"
+                    % (name, v["offset"] * 1000, v["onsets"], v["confidence"]))
+        if offset is None:
+            log("  ⚠ could not align from any stem — embedding at 0")
+            offset = 0.0
+        else:
+            agree, total = res.get("agreement", 1), res.get("total", 1)
+            log("  offset %+.0f ms — %d of %d stems agree, confidence %.1fx"
+                % (offset * 1000, agree, total, conf))
+            if total > 1 and agree < total:
+                log("  ⚠ stems disagree; the recording may drift against the score, "
+                    "so one offset will not hold throughout")
     else:
-        agree, total = res.get("agreement", 1), res.get("total", 1)
-        log("  offset %+.0f ms — %d of %d stems agree (%s), confidence %.1fx"
-            % (offset * 1000, agree, total, res["method"], conf))
-        if total > 1 and agree < total:
-            log("  ⚠ stems disagree; the recording may drift against the score's "
-                "fixed tempo, so one offset will not hold throughout")
-        elif conf < 3.0:
-            log("  ⚠ weak match — check the audio lines up")
-        if offset < 0:
-            log("  ⚠ audio starts before the score; clamping to 0")
-    return embed(gp_path, audio_path, out_path,
-                 padding_frames=round(max(0.0, offset) * SAMPLE_RATE))
+        log("  offset %+.0f ms" % (offset * 1000))
+
+    if offset < 0:
+        log("  ⚠ audio starts before the score; clamping to 0")
+    try:
+        return embed(source, audio_path, out_path,
+                     padding_frames=round(max(0.0, offset) * SAMPLE_RATE))
+    finally:
+        if tmp_gp:
+            try:
+                os.unlink(tmp_gp)
+            except OSError:
+                pass

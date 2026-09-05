@@ -26,12 +26,13 @@ _NOISE = re.compile(
 )
 
 
-def norm(text: str) -> str:
+def norm(text: str, strip_noise: bool = True) -> str:
     """Comparable form of a title or artist name."""
     if not text:
         return ""
     t = text.lower()
-    t = _NOISE.sub("", t)
+    if strip_noise:
+        t = _NOISE.sub("", t)
     t = t.replace("&", " and ")
     t = re.sub(r"[‘’“”']", "", t)   # smart quotes, apostrophes
     t = re.sub(r"[^a-z0-9]+", " ", t)
@@ -46,10 +47,44 @@ def _artist_ok(a: str, b: str) -> bool:
     return a == b or a in b or b in a
 
 
+UNCERTAIN_PENALTY = 0.45     # title matches, artist does not
+
+
+def rate(track: dict, tab: dict):
+    """Return (score, certain). 0 means no match at all.
+
+    A tab whose title matches but whose artist does not is still worth
+    offering: Songsterr uploads are frequently misattributed -- Spiritbox's
+    "Holy Roller" is filed under "Box Of Spirits" -- so rejecting on artist
+    alone loses the correct tab. It is returned as *uncertain* instead, which
+    means it is shown for the user to confirm rather than chosen for them.
+    """
+    title_score = _title_score(track, tab)
+    if title_score <= 0:
+        return 0.0, False
+    # Noise-stripping is right for a streaming title -- "(Remastered 2011)" is
+    # not part of the song -- but on a tab title the brackets carry the version:
+    # "Holy Roller (Zev Rose live playthrough drums only)" strips down to an
+    # exact match and would otherwise beat the plain transcription. Charge for
+    # whatever the tab title says that the track title does not.
+    extra = max(0, len(norm(tab.get("title", ""), strip_noise=False).split())
+                   - len(norm(track.get("trackName", ""), strip_noise=False).split()))
+    title_score = max(0.3, title_score - 0.04 * extra)
+    if _artist_ok(track.get("artistName", ""), tab.get("artist", "")):
+        return title_score, True
+    # Only an exact title is a strong enough signal to survive a wrong artist;
+    # a partial title plus a wrong artist is just a different song.
+    if title_score < 1.0:
+        return 0.0, False
+    return title_score * UNCERTAIN_PENALTY, False
+
+
 def score(track: dict, tab: dict) -> float:
-    """0 = no match. Higher is better."""
-    if not _artist_ok(track.get("artistName", ""), tab.get("artist", "")):
-        return 0.0
+    """Match strength alone, ignoring whether it was certain."""
+    return rate(track, tab)[0]
+
+
+def _title_score(track: dict, tab: dict) -> float:
     t, s = norm(track.get("trackName", "")).split(), norm(tab.get("title", "")).split()
     if not t or not s:
         return 0.0
@@ -69,14 +104,33 @@ def score(track: dict, tab: dict) -> float:
     return max(0.5, 0.9 - 0.05 * extra)
 
 
+def _annotate(tr, tabs, limit):
+    """Best few tabs for one track, each tagged with its score and certainty.
+
+    Ties break toward the plainest title. Normalisation strips "(live …)" and
+    similar, which is right for a streaming title but means a tab called
+    "Holy Roller (Zev Rose live playthrough drums only)" normalises to an exact
+    match and would otherwise outrank the plain transcription.
+    """
+    hits = []
+    for tb in tabs:
+        sc, certain = rate(tr, tb)
+        if sc > 0:
+            # Copy: a pool entry can match several tracks, each needing its own
+            # verdict.
+            hits.append((sc, len(tb.get("title") or ""),
+                         dict(tb, _score=sc, _certain=certain)))
+    hits.sort(key=lambda x: (-x[0], x[1]))
+    return [tb for _s, _n, tb in hits[:limit]]
+
+
 def bucket(tracks: list[dict], tabs: list[dict], limit: int = 3) -> dict[int, list[dict]]:
     """Assign tabs from a shared pool to the tracks they match."""
     out: dict[int, list[dict]] = {}
     for i, tr in enumerate(tracks):
-        scored = [(score(tr, tb), tb) for tb in tabs]
-        hits = sorted([x for x in scored if x[0] > 0], key=lambda x: -x[0])
+        hits = _annotate(tr, tabs, limit)
         if hits:
-            out[i] = [tb for _s, tb in hits[:limit]]
+            out[i] = hits
     return out
 
 
@@ -103,10 +157,8 @@ def fill(tracks: list[dict], found: dict[int, list[dict]], search_fn,
                 res = search_fn(q, 10)
             except Exception:
                 return
-            hits = sorted([(score(tr, tb), tb) for tb in res if score(tr, tb) > 0],
-                          key=lambda x: -x[0])
-            if hits:
-                tabs = [tb for _s, tb in hits[:limit]]
+            tabs = _annotate(tr, res, limit)
+            if tabs:
                 with lock:
                     found[i] = tabs
                 if on_found:

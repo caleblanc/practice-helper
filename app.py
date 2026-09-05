@@ -382,6 +382,17 @@ class SettingsDialog(ctk.CTkToplevel):
         ctk.CTkCheckBox(fmt, text="Guitar Pro", variable=self._var_gp,
                         font=("", 12), width=110).pack(side="left")
 
+        self._var_fittempo = ctk.BooleanVar(value=bool(getattr(self.app, "fit_tempo", True)))
+        ctk.CTkCheckBox(body, text="Match score tempo to the recording",
+                        variable=self._var_fittempo, font=("", 12)
+                        ).pack(fill="x", padx=4, pady=(16, 2))
+        ctk.CTkLabel(body, anchor="w", justify="left", text_color=MUTED,
+                     font=("", 10), wraplength=470,
+                     text=("Adjusts the score's tempo markings so embedded audio stays "
+                           "in time through tempo changes. Turn off to keep the tempos "
+                           "exactly as transcribed.")
+                     ).pack(fill="x", padx=6, pady=(0, 4))
+
         ctk.CTkLabel(body, text="Stem separation model", text_color=MUTED,
                      anchor="w", font=("", 12)).pack(fill="x", padx=4, pady=(14, 4))
         self._model_seg = ctk.CTkSegmentedButton(
@@ -455,6 +466,7 @@ class SettingsDialog(ctk.CTkToplevel):
         self.app.demucs_model = _mv.get(self._model_seg.get(), "htdemucs")
         self.app.want_midi    = bool(self._var_midi.get())
         self.app.want_gp      = bool(self._var_gp.get())
+        self.app.fit_tempo    = bool(self._var_fittempo.get())
         self.app.persist()
         if hasattr(self.app, "am_panel"):
             self.app.am_panel.retheme()
@@ -685,8 +697,14 @@ class TabRow(ctk.CTkFrame):
         inner.pack(fill="x", padx=8, pady=3)
         ctk.CTkLabel(inner, text="↳", text_color=MUTED,
                      font=("", 11), width=14).pack(side="left")
-        ctk.CTkLabel(inner, text=self.tab.get("title", "Unknown"), anchor="w",
-                     text_color=BLUE, font=("", 11)).pack(side="left", fill="x", expand=True)
+        title = self.tab.get("title", "Unknown")
+        if not self.tab.get("_certain", True):
+            # Filed under a different artist, so name it: that is the whole
+            # reason this row is being shown instead of chosen automatically.
+            title += "   — %s" % self.tab.get("artist", "?")
+        ctk.CTkLabel(inner, text=title, anchor="w",
+                     text_color=BLUE if self.tab.get("_certain", True) else ORANGE,
+                     font=("", 11)).pack(side="left", fill="x", expand=True)
         if icons:
             ctk.CTkLabel(inner, text=" ".join(icons), font=("", 11)).pack(side="right")
 
@@ -706,6 +724,8 @@ class TrackRow(ctk.CTkFrame):
         self._on_select_track = on_select_track
         self._on_select_tab = on_select_tab
         self.tab_rows: list = []
+        self.tabs: list = []
+        self.auto_only = False
         self._build()
 
     def _build(self):
@@ -733,12 +753,30 @@ class TrackRow(ctk.CTkFrame):
         for w in self._tabs_host.winfo_children():
             w.destroy()
         self.tab_rows = []
-        if not tabs:
+        self.tabs = list(tabs or [])
+        if not self.tabs:
+            self.auto_only = False
             ctk.CTkLabel(self._tabs_host, text="   no tab found", text_color=MUTED,
                          anchor="w", font=("", 10)).pack(fill="x", padx=40, pady=(0, 2))
             return
-        for tb in tabs:
+
+        # A chooser is only worth showing when there is a choice to make: more
+        # than one version, or a match we are not sure about. One confident hit
+        # is just the answer, so state it and select it with the song.
+        self.auto_only = len(self.tabs) == 1 and self.tabs[0].get("_certain", False)
+        if self.auto_only:
+            self._auto_lbl = ctk.CTkLabel(
+                self._tabs_host, anchor="w", font=("", 10), text_color=MUTED,
+                text="   ↳ %s" % self.tabs[0].get("title", ""))
+            self._auto_lbl.pack(fill="x", padx=40, pady=(0, 3))
+            return
+        for tb in self.tabs:
             self.tab_rows.append(TabRow(self._tabs_host, tb, self._on_select_tab))
+
+    def mark_auto(self, on: bool):
+        """Highlight the implicitly-chosen tab while the track is selected."""
+        if getattr(self, "auto_only", False) and hasattr(self, "_auto_lbl"):
+            self._auto_lbl.configure(text_color=BLUE if on else MUTED)
 
     def set_selected(self, v: bool):
         self._head.configure(fg_color=SURFACE if v else "transparent",
@@ -763,6 +801,7 @@ class BrowserPanel(ctk.CTkFrame):
         self._rows: list = []
         self._sel_track = None
         self._sel_tab = None
+        self._sel_tab_data = None
         self._selected_rev = None
         self._stem_vars = {}
         self._combo_vars = {}
@@ -960,6 +999,7 @@ class BrowserPanel(ctk.CTkFrame):
         self._rows = []
         self._sel_track = None
         self._sel_tab = None
+        self._sel_tab_data = None
         self._selected_rev = None
         self._instrument_vars.clear()
         self._rev_label.configure(text="")
@@ -985,7 +1025,10 @@ class BrowserPanel(ctk.CTkFrame):
     def _clear_tab_selection(self):
         if self._sel_tab is not None:
             self._sel_tab.set_selected(False)
+        for r in self._rows:
+            r.mark_auto(False)
         self._sel_tab = None
+        self._sel_tab_data = None
         self._selected_rev = None
 
     def _on_track_click(self, row):
@@ -1003,6 +1046,26 @@ class BrowserPanel(ctk.CTkFrame):
         self._instrument_vars.clear()
         self._sel_track = idx
         row.set_selected(True)
+        # Selecting a song selects its best tab: that pairing is the point, and
+        # making the user click twice for the obvious choice is friction.
+        self._choose_default_tab(row)
+
+    def _choose_default_tab(self, row):
+        if getattr(row, "auto_only", False) and row.tabs:
+            row.mark_auto(True)
+            self._select_tab_data(row.tabs[0])
+        elif row.tab_rows:
+            first = row.tab_rows[0]
+            self._sel_tab = first
+            first.set_selected(True)
+            self._select_tab_data(first.tab)
+
+    def _select_tab_data(self, tab: dict):
+        self._sel_tab_data = tab
+        self._populate_checkboxes(tab)
+        self._rev_label.configure(text="Loading revision…", text_color=MUTED)
+        threading.Thread(target=self._load_rev, args=(tab["songId"],),
+                         daemon=True).start()
 
     def _on_tab_click(self, tab_row):
         # Choosing a tab implies its track: the pairing on screen is the whole
@@ -1021,10 +1084,7 @@ class BrowserPanel(ctk.CTkFrame):
             parent.set_selected(True)
         self._sel_tab = tab_row
         tab_row.set_selected(True)
-        self._populate_checkboxes(tab_row.tab)
-        self._rev_label.configure(text="Loading revision…", text_color=MUTED)
-        threading.Thread(target=self._load_rev, args=(tab_row.tab["songId"],),
-                         daemon=True).start()
+        self._select_tab_data(tab_row.tab)
 
     def _load_rev(self, song_id: int):
         try:
@@ -1054,7 +1114,9 @@ class BrowserPanel(ctk.CTkFrame):
 
     @property
     def selected_song(self):
-        return self._sel_tab.tab if self._sel_tab is not None else None
+        # May have been chosen implicitly with the track, in which case there
+        # is no row widget to read it from.
+        return getattr(self, "_sel_tab_data", None)
 
     @property
     def selected_rev(self):
@@ -1123,6 +1185,7 @@ class App(ctk.CTk):
         self.combo_sel     = cfg.get("combo_sel", {})
         self.gp_with_audio = cfg.get("gp_with_audio", False)
         self.gp_audio_sel  = cfg.get("gp_audio_sel", {})
+        self.fit_tempo     = cfg.get("fit_tempo", True)
 
         self._build()
 
@@ -1142,6 +1205,7 @@ class App(ctk.CTk):
             "combo_sel":     self.combo_sel,
             "gp_with_audio": self.gp_with_audio,
             "gp_audio_sel":  self.gp_audio_sel,
+            "fit_tempo":     self.fit_tempo,
         })
 
     def _build(self):
@@ -1774,15 +1838,6 @@ class App(ctk.CTk):
             sep_dir = tmp / model / demucs_input.stem
             song_dir.mkdir(parents=True, exist_ok=True)
 
-            if want_od:
-                od_src = sep_dir / "drums.wav"
-                if od_src.exists():
-                    dest = song_dir / f"{label} (OD).wav"
-                    shutil.move(str(od_src), str(dest))
-                    self._log_line(f"  ✓ Drums: {dest.name}")
-                else:
-                    errors.append("drums.wav missing after demucs")
-
             def _write_mix(names: list, dest: Path) -> bool:
                 try:
                     import numpy as np, soundfile as sf
@@ -1801,17 +1856,10 @@ class App(ctk.CTk):
                 sf.write(str(dest), np.clip(mix, -1.0, 1.0), rate)
                 return True
 
-            for name in stems:
-                if name == "drums" and want_od:
-                    continue          # already written as (OD).wav
-                srcf = sep_dir / f"{name}.wav"
-                if srcf.exists():
-                    dest = song_dir / f"{label} ({name}).wav"
-                    shutil.move(str(srcf), str(dest))
-                    self._log_line(f"  ✓ {name}: {dest.name}")
-                else:
-                    errors.append(f"{name}.wav missing after demucs")
-
+            # Mixes are built BEFORE anything is moved out of the separation
+            # directory. Moving first left _write_mix reading paths that no
+            # longer existed, so any combination overlapping a stem the user had
+            # also asked for individually failed with "combined mix failed".
             if combo:
                 dest = song_dir / f"{label} ({'+'.join(combo)}).wav"
                 if _write_mix(combo, dest):
@@ -1823,14 +1871,33 @@ class App(ctk.CTk):
                 dest = song_dir / f"{label} (ND).wav"
                 nd_src = sep_dir / "no_drums.wav"
                 if nd_src.exists():
-                    # two-stem fast path produced it directly
-                    shutil.move(str(nd_src), str(dest))
+                    shutil.copy2(str(nd_src), str(dest))     # two-stem fast path
                     self._log_line(f"  ✓ No drums: {dest.name}")
                 elif _write_mix([x for x in sources if x != "drums"], dest):
-                    # full separation: sum every non-drum source back together
                     self._log_line(f"  ✓ ND: {dest.name}")
                 else:
                     errors.append("could not build ND (no-drums) mix")
+
+            if want_od:
+                od_src = sep_dir / "drums.wav"
+                if od_src.exists():
+                    dest = song_dir / f"{label} (OD).wav"
+                    shutil.move(str(od_src), str(dest))
+                    self._log_line(f"  ✓ Drums: {dest.name}")
+                else:
+                    errors.append("drums.wav missing after demucs")
+
+            for name in stems:
+                if name == "drums" and want_od:
+                    continue          # already written as (OD).wav
+                srcf = sep_dir / f"{name}.wav"
+                if srcf.exists():
+                    dest = song_dir / f"{label} ({name}).wav"
+                    shutil.move(str(srcf), str(dest))
+                    self._log_line(f"  ✓ {name}: {dest.name}")
+                else:
+                    errors.append(f"{name}.wav missing after demucs")
+
         finally:
             shutil.rmtree(str(tmp), ignore_errors=True)
 
@@ -1978,7 +2045,8 @@ class App(ctk.CTk):
                     pool[name] = str(hit)
             gp_audio.align_and_embed(str(gp), pool.get("drums"),
                                      str(mixed), str(gp) + ".tmp",
-                                     log=self._log_line, stems=pool)
+                                     log=self._log_line, stems=pool,
+                                     fit_tempo=bool(getattr(self, "fit_tempo", True)))
             os.replace(str(gp) + ".tmp", str(gp))
             mixed.unlink(missing_ok=True)
             self._log_line(f"  ✓ Audio embedded ({len(parts)} stem(s))")
