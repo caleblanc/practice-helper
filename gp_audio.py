@@ -230,6 +230,35 @@ ASSETS = """<Assets>
 """
 
 
+def leading_silence(audio_path, thresh=0.01):
+    """Seconds before the recording actually starts."""
+    import numpy as np, soundfile as sf
+    data, sr = sf.read(str(audio_path), always_2d=True)
+    x = np.abs(data.mean(axis=1))
+    pk = float(x.max())
+    if pk <= 0:
+        return 0.0
+    above = np.flatnonzero(x > thresh * pk)
+    return float(above[0]) / sr if len(above) else 0.0
+
+
+def _trim_head(audio_path, seconds):
+    """Copy *audio_path* with *seconds* removed from the front.
+
+    FramePadding can only delay a backing track, never advance it, so when the
+    recording starts later than the score -- a mixdown carrying its own leading
+    silence, most often -- the only way to line them up is to cut the front off
+    the audio.
+    """
+    import numpy as np, soundfile as sf
+    data, sr = sf.read(str(audio_path), always_2d=True)
+    cut = min(len(data) - 1, max(0, int(round(seconds * sr))))
+    fd, out = tempfile.mkstemp(suffix=".wav")
+    os.close(fd)
+    sf.write(out, data[cut:], sr)
+    return out
+
+
 def embed(gp_path, audio_path, out_path, padding_frames=0, original_path=None):
     """Write a copy of *gp_path* carrying *audio_path* as an aligned backing track."""
     gp_path, audio_path, out_path = str(gp_path), str(audio_path), str(out_path)
@@ -238,6 +267,12 @@ def embed(gp_path, audio_path, out_path, padding_frames=0, original_path=None):
 
     with zipfile.ZipFile(gp_path) as z:
         members = {n: z.read(n) for n in z.namelist() if not n.endswith("/")}
+    # Drop any previously embedded audio. The <Assets> XML below is rewritten,
+    # but without this the old .wav stayed in the archive -- re-embedding a
+    # score left every earlier take inside it, tens of megabytes each, and
+    # readers picking an asset by name could get the stale one.
+    for n in [k for k in members if k.startswith("Content/Assets/")]:
+        del members[n]
     gpif = members["Content/score.gpif"].decode("utf-8")
 
     gpif = re.sub(r"<BackingTrack>.*?</BackingTrack>", "", gpif, flags=re.S)
@@ -511,14 +546,31 @@ def fit_tempo_map(gp_path, stems, window=600.0, max_lag=30.0):
         off, conf = _peak(total, fps_used, lags)
         return off, conf, votes
 
-    offs = []
+    # First sweep: locate each region, chaining to the previous one.
+    rough = []
     anchor = None
     for i in range(len(bounds) - 1):
-        # The first measurable region is found from scratch; the rest are looked
-        # for near whatever the previous one settled on.
         o, c, v = offset_between(bounds[i], bounds[i + 1], centre=anchor)
         if o is not None:
             anchor = o
+        rough.append((o, c, v))
+
+    # A song has one true start offset; approximate tempos make regions drift
+    # against it by a few hundred milliseconds, never by seconds. Chaining each
+    # region to the previous lets one bad reading propagate and, across
+    # iterations, run away entirely -- a region reached -1672 ms while the rest
+    # agreed within 11 ms. So anchor everything to whichever region was read
+    # most confidently and re-read the others close to it.
+    measured = [(c, o) for o, c, v in rough if o is not None]
+    best = max(measured) if measured else None
+
+    offs = []
+    for i in range(len(bounds) - 1):
+        if best is None:
+            o, c, v = rough[i]
+        else:
+            o, c, v = offset_between(bounds[i], bounds[i + 1],
+                                     centre=best[1], span=1.2)
         offs.append(o)
         detail["regions"].append({"bar": tempos[i][0], "bpm": tempos[i][1],
                                   "offset": o, "confidence": c, "stems": v,
@@ -569,7 +621,7 @@ def fit_tempo_map(gp_path, stems, window=600.0, max_lag=30.0):
         ratio = score_len / audio_len
         # Refuse absurd corrections: beyond a few percent this is a bad
         # correlation, not a transcriber's rounding.
-        if not (0.90 <= ratio <= 1.10):
+        if not (0.95 <= ratio <= 1.05):
             corrected.append((bar, bpm))
             continue
         corrected.append((bar, round(bpm * ratio, 3)))
@@ -597,6 +649,48 @@ def write_tempo_map(gp_path, tempos, out_path):
     return out_path
 
 
+def fit_tempo_map_iterative(gp_path, stems, passes=4, window=600.0, max_lag=30.0):
+    """Fit the tempo map repeatedly until it stops moving.
+
+    Tempo and offset are not independent: correcting the tempos changes where
+    every bar falls, which changes each region's measured offset, which implies
+    different tempos again. A single pass leaves the map half-corrected -- on
+    Blindfolds Aside the early regions then sat at +70 ms while the later ones
+    sat at +430 ms, and the padding was taken from the wrong end of that.
+
+    Returns (padding_seconds, tempos, detail) in terms of the original bars.
+    """
+    current = gp_path
+    tmps = []
+    pad, tempos, detail = None, [], {"regions": [], "passes": 0}
+    try:
+        for i in range(passes):
+            p_i, t_i, d_i = fit_tempo_map(current, stems, window=window, max_lag=max_lag)
+            if p_i is None:
+                break
+            got = [r["offset"] for r in d_i["regions"] if r["offset"] is not None]
+            spread = (max(got) - min(got)) if got else 0.0
+            d_i["spread"], d_i["passes"] = spread, i + 1
+            # Keep the tightest result, not the newest: a further pass can make
+            # things worse, and there is no reason to ship the worse one.
+            if pad is None or spread < detail.get("spread", 1e9):
+                pad, tempos, detail = p_i, t_i, d_i
+            if not d_i.get("changed") or spread < 0.030:
+                break
+            fd, tmp = tempfile.mkstemp(suffix=".gp")
+            os.close(fd)
+            write_tempo_map(current, t_i, tmp)
+            tmps.append(tmp)
+            current = tmp
+    finally:
+        for t in tmps:
+            try:
+                os.unlink(t)
+            except OSError:
+                pass
+    return pad, tempos, detail
+
+
 def align_and_embed(gp_path, drum_stem, audio_path, out_path, log=print,
                     stems=None, fit_tempo=True):
     """Align *audio_path* to the score and embed it.
@@ -621,7 +715,7 @@ def align_and_embed(gp_path, drum_stem, audio_path, out_path, log=print,
 
     if fit_tempo:
         try:
-            pad, corrected, detail = fit_tempo_map(gp_path, pool)
+            pad, corrected, detail = fit_tempo_map_iterative(gp_path, pool)
         except Exception as e:
             pad, corrected, detail = None, [], {"error": str(e)}
             log("  ⚠ tempo fitting failed (%s); falling back to a single offset" % e)
@@ -664,16 +758,44 @@ def align_and_embed(gp_path, drum_stem, audio_path, out_path, log=print,
                 log("  ⚠ stems disagree; the recording may drift against the score, "
                     "so one offset will not hold throughout")
     else:
-        log("  offset %+.0f ms" % (offset * 1000))
+        log("  audio runs %+.0f ms behind the score" % (offset * 1000))
 
-    if offset < 0:
-        log("  ⚠ audio starts before the score; clamping to 0")
+    # The estimator reports how far the recording runs BEHIND the score, so
+    # lining them up means moving the audio by the opposite amount. Verified
+    # against synthetic audio delayed by a known 400 ms, which it reports as
+    # +383 ms: the shift required is the negative of that.
+    shift = -offset
+    trimmed = None
+    if shift >= 0:
+        padding = shift
+    else:
+        # Audio starts after the score. Padding cannot advance it, so cut the
+        # difference off the front instead.
+        want = -shift
+        try:
+            silence = leading_silence(audio_path)
+        except Exception:
+            silence = want
+        if want > silence + 0.020:
+            # Cutting past the silence means cutting into the first note. The
+            # recording plainly starts where the silence ends, so trust that
+            # over a correlation estimate that wants to go further.
+            log("  estimate wanted %.0f ms trimmed but the recording starts at "
+                "%.0f ms; trimming to the start of the audio"
+                % (want * 1000, silence * 1000))
+            want = silence
+        trimmed = _trim_head(audio_path, want)
+        audio_path = trimmed
+        padding = 0.0
+        log("  trimmed %.0f ms of leading silence (padding cannot advance a track)"
+            % (want * 1000))
     try:
         return embed(source, audio_path, out_path,
-                     padding_frames=round(max(0.0, offset) * SAMPLE_RATE))
+                     padding_frames=round(padding * SAMPLE_RATE))
     finally:
-        if tmp_gp:
-            try:
-                os.unlink(tmp_gp)
-            except OSError:
-                pass
+        for t in (tmp_gp, trimmed):
+            if t:
+                try:
+                    os.unlink(t)
+                except OSError:
+                    pass
