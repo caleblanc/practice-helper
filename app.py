@@ -1481,6 +1481,23 @@ class App(ctk.CTk):
         finally:
             shutil.rmtree(str(tmp), ignore_errors=True)
 
+    def _accelerator(self) -> str:
+        """Pick a demucs device by what torch can actually see.
+
+        Choosing on operating system alone is wrong: plenty of Windows and
+        Linux machines have no CUDA GPU, and asking demucs for one there fails
+        outright instead of quietly falling back.
+        """
+        try:
+            import torch
+            if torch.cuda.is_available():
+                return "cuda"
+            if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+                return "mps"
+        except Exception:
+            pass
+        return "cpu"
+
     def _to_wav(self, src: Path, dst: Path) -> bool:
         """Convert *src* to 16-bit WAV at *dst*. Returns True on success."""
         if _MAC:
@@ -1518,8 +1535,7 @@ class App(ctk.CTk):
             self._log_line(f"▶ Extracting stems from: {src.name}")
             runner = Path(__file__).parent / "demucs_runner.py"
             python = find_tool("python3", self.tools_path) or sys.executable
-            # MPS = Apple Silicon GPU; CUDA on Windows if available; else CPU
-            accel = "mps" if _MAC else ("cuda" if _WIN else "cpu")
+            accel = self._accelerator()
             model = getattr(self, "demucs_model", "htdemucs")
             sources = STEM_SOURCES.get(model, STEM_SOURCES["htdemucs"])
             stems = [x for x in stems if x in sources]
